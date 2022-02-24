@@ -1,0 +1,266 @@
+from typing import AnyStr, Sequence, Union
+
+import numpy as np
+import openvds
+
+from ovds_utils.exceptions import VDSException
+from ovds_utils.logging import get_logger
+from ovds_utils.metadata import MetadataContainer
+from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds, write_pages
+
+logger = get_logger(__name__)
+
+
+class VDS:
+    def __init__(
+        self,
+        path: AnyStr,
+        connection_string: AnyStr = "",
+        shape: Sequence[int] = None,
+        databrick_size: BrickSizes = BrickSizes.BrickSize_128,
+        components: Components = Components.Components_1,
+        format: Formats = Formats.R32
+    ) -> None:
+        super().__init__()
+        self.path = path
+        self.connection_string = connection_string
+        try:
+            self._vds_source = openvds.open(path, connection_string)
+        except RuntimeError as e:
+            if str(e) in ("Open error: File::open "):
+                if shape is None:
+                    raise VDSException("Shape was not defined during creating new VDS source.")
+                logger.debug("Creating new VDS source...")
+                self.create(
+                    path=path,
+                    connection_string=connection_string,
+                    shape=shape,
+                    databrick_size=databrick_size,
+                    access_mode=AccessModes.Create,
+                    components=components,
+                    format=format,
+                )
+                self._vds_source = openvds.open(path, connection_string)
+            else:
+                raise VDSException(f"Open VDS resulted with: {str(e)}") from e
+        self._layout = openvds.getLayout(self._vds_source)
+        self._dimensionality = self._layout.getDimensionality()
+        self._axis_descriptors = [
+            self._layout.getAxisDescriptor(dim) for dim in range(self._dimensionality)
+        ]
+
+    def __del__(self):
+        openvds.close(self._vds_source)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        return
+
+    @property
+    def metadata(self) -> MetadataContainer:
+        return MetadataContainer.get_from_layout(self._layout)
+
+    def __str__(self) -> str:
+        return f"<{self.__class__.__qualname__}(path={self.path})>"
+
+    @property
+    def shape(self):
+        return tuple(int(a.numSamples) for a in self._axis_descriptors)
+
+    @staticmethod
+    def create(
+        path: AnyStr,
+        connection_string: AnyStr,
+        shape: Sequence[int],
+        databrick_size=BrickSizes.BrickSize_128,
+        access_mode=AccessModes.Create,
+        components=Components.Components_1,
+        format=Formats.R32,
+        data: np.array = None
+    ):
+        return create_vds(
+            path,
+            connection_string,
+            shape,
+            databrick_size=databrick_size.value,
+            access_mode=access_mode.value,
+            components=components.value,
+            format=format.value,
+            data=data,
+            create_and_write_empty_pages=True,
+            close=True
+        )
+
+    def get_accessor(
+            self,
+            access_mode: AccessModes = AccessModes.ReadWrite,
+            lod: int = 0,
+            channel: int = 0,
+            maxPages: int = 8,
+            chunkMetadataPageSize: int = 1024,
+            dimensionsND=Dimensions.Dimensions_012,
+    ):
+        access_manager = openvds.getAccessManager(self._vds_source)
+        accessor = access_manager.createVolumeDataPageAccessor(
+            dimensionsND=dimensionsND.value,
+            accessMode=access_mode.value,
+            lod=lod,
+            channel=channel,
+            maxPages=maxPages,
+            chunkMetadataPageSize=chunkMetadataPageSize,
+        )
+        return accessor
+
+    def write_pages(self, data: np.array) -> None:
+        accessor = self.get_accessor()
+        return write_pages(accessor, data)
+
+    @staticmethod
+    def _read_data(
+        vds_source: openvds.core.VDS,
+        begin: Sequence[int],
+        end: Sequence[int],
+        format=Formats.R32,
+        lod: int = 0,
+        replacementNoValue: float = 0.0,
+        channel: int = 0
+    ):
+        begin = begin + ([0]*len(begin))
+        end = end + ([1]*len(end))
+        accessManager = openvds.VolumeDataAccessManager(vds_source)
+        req = accessManager.requestVolumeSubset(
+            begin,  # start slice
+            end,  # end slice
+            format=format.value,
+            lod=lod,
+            replacementNoValue=replacementNoValue,
+            channel=channel,
+        )
+
+        if req.data is None:
+            err_code, err_msg = accessManager.getCurrentDownloadError()
+            logger.exception(err_code)
+            logger.exception(err_msg)
+            raise RuntimeError(f"requestVolumeSubset failed! Message: {err_msg}, Error Code: {err_code}")
+
+        return req
+
+    def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
+        if all([isinstance(i, int) for i in key]):
+            begin = [i for i in key]
+            end = [i for i in key]
+        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
+            begin = []
+            end = []
+            for i, k in enumerate(key):
+                if isinstance(k, slice):
+                    begin.append(k.start if k.start else 0)
+                    end.append(
+                        k.stop if k.stop else int(self._axis_descriptors[i].numSamples)
+                    )
+                elif isinstance(k, int):
+                    begin.append(k)
+                    end.append(k)
+        else:
+            raise VDSException("Item key is not list of slices or int")
+        req = self._read_data(self._vds_source, begin, end)
+
+        dims = (
+            end[2] - begin[2],
+            end[1] - begin[1],
+            end[0] - begin[0],
+        )
+        dims = dims[::-1]
+
+        # if all([isinstance(i, slice) for i in key]):
+        #   return req.data.reshape(*dims).__getitem__(
+        #        [slice(None, None, k.step) for k in key]
+        #    )
+        return req.data.reshape(*dims)
+
+
+class VDSComposite:
+    def __init__(self, subsets: Sequence[VDS] = None, slice_dim: int = None) -> None:
+        if subsets is None:
+            subsets = []
+        if slice_dim is None:
+            slice_dim = 0
+        self.__subsets = subsets
+        self.__shapes = []
+
+        for s in self.__subsets:
+            self.__shapes.append(s.shape)
+
+        self.__slice_dim = slice_dim
+
+        self.shape = None
+        for i, s in enumerate(subsets):
+            if i == 0:
+                self.shape = list(s.shape)
+            else:
+                self.shape[slice_dim] += s.shape[slice_dim]
+
+    def add_subset(self, subset: VDS):
+        self.__subsets.append(subset)
+        self.__shapes.append(subset.shape)
+
+        self.shape = None
+        for i, s in enumerate(self.__subsets):
+            if i == 0:
+                self.shape = list(s.shape)
+            else:
+                self.shape[self.__slice_dim] += s.shape[self.__slice_dim]
+
+        self.shape = tuple(self.shape)
+
+    def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
+        key = list(key)
+        # for i, k in enumerate(key):
+        #    if isinstance(k, int):
+        #        key[i] = slice(k - 1, k, None)
+
+        if all([isinstance(i, slice) or isinstance(i, int) for i in key]):
+            for i, k in enumerate(key):
+                if isinstance(k, slice):
+                    if k.start > self.shape[i] + 1 or k.stop > self.shape[i] + 1:
+                        raise Exception(f"{key} is out of range {self.shape}")
+                else:
+                    if k >= self.shape[i]:
+                        raise Exception(f"{key} is out of range {self.shape}")
+
+            _slice = key[self.__slice_dim]
+            _slices = []
+            if isinstance(_slice, slice):
+                cnt = 0
+                for i in range(len(self.__shapes)):
+                    b = cnt + self.__shapes[i][self.__slice_dim]
+                    if _slice.start >= cnt and _slice.stop < b:
+                        _slices.append(
+                            slice(_slice.start - cnt, _slice.stop - cnt, None)
+                        )
+                    else:
+                        _slices.append(None)
+
+                    cnt += self.__shapes[i][self.__slice_dim]
+
+                result_list = []
+                for i, s in enumerate(_slices):
+                    if s:
+                        key[self.__slice_dim] = s
+                        result_list.append(self.__subsets[i].__getitem__(tuple(key)))
+                return np.concatenate(tuple(result_list), axis=self.__slice_dim)
+            elif isinstance(_slice, int):
+                cnt = 0
+                for i in range(len(self.__shapes)):
+                    b = cnt + self.__shapes[i][self.__slice_dim]
+                    if _slice >= cnt and _slice < b:
+                        key[self.__slice_dim] = _slice - cnt
+                        return self.__subsets[i].__getitem__(tuple(key))
+
+                    cnt += self.__shapes[i][self.__slice_dim]
+            else:
+                pass
+        else:
+            raise VDSException("Key elements must be instances of slice or int.")
