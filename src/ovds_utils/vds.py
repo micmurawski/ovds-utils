@@ -19,12 +19,16 @@ class VDS:
         shape: Sequence[int] = None,
         databrick_size: BrickSizes = BrickSizes.BrickSize_128,
         components: Components = Components.Components_1,
-        format: Formats = Formats.R32
+        format: Formats = Formats.R32,
+        begin: Sequence[int] = None,
+        end: Sequence[int] = None,
     ) -> None:
         super().__init__()
         self.path = path
         self.connection_string = connection_string
         self._accessor = None
+        self.begin = begin
+        self.end = end
         try:
             self._vds_source = openvds.open(path, connection_string)
         except RuntimeError as e:
@@ -40,6 +44,8 @@ class VDS:
                     access_mode=AccessModes.Create,
                     components=components,
                     format=format,
+                    begin=begin,
+                    end=end
                 )
                 self._vds_source = openvds.open(path, connection_string)
             else:
@@ -69,6 +75,12 @@ class VDS:
 
     @property
     def shape(self):
+        if self.begin and self.end:
+            return (
+                self.end[2] - self.begin[2],
+                self.end[1] - self.begin[1],
+                self.end[0] - self.begin[0],
+            )
         return tuple(int(a.numSamples) for a in self._axis_descriptors)
 
     @staticmethod
@@ -80,7 +92,9 @@ class VDS:
         access_mode=AccessModes.Create,
         components=Components.Components_1,
         format=Formats.R32,
-        data: np.array = None
+        data: np.array = None,
+        begin: Sequence[int] = None,
+        end: Sequence[int] = None
     ):
         return create_vds(
             path,
@@ -92,7 +106,9 @@ class VDS:
             format=format.value,
             data=data,
             create_and_write_empty_pages=True,
-            close=True
+            close=True,
+            begin=begin,
+            end=end
         )
 
     @property
@@ -127,7 +143,7 @@ class VDS:
             raise VDSException(f"Chunk number is out of range of: 0 to {self.chunks_count-1}")
         accessor = self.create_accessor()
         page = accessor.createPage(number)
-        #buf = np.array(page.getWritableBuffer(), copy=False)
+        # buf = np.array(page.getWritableBuffer(), copy=False)
         return page
 
     def write_pages(self, data: np.array) -> None:
@@ -153,6 +169,12 @@ class VDS:
         replacementNoValue: float = 0.0,
         channel: int = 0
     ):
+        dims = (
+            end[2] - begin[2],
+            end[1] - begin[1],
+            end[0] - begin[0],
+        )
+
         begin = begin + ([0]*len(begin))
         end = end + ([1]*len(end))
         accessManager = openvds.VolumeDataAccessManager(vds_source)
@@ -171,9 +193,10 @@ class VDS:
             logger.exception(err_msg)
             raise RuntimeError(f"requestVolumeSubset failed! Message: {err_msg}, Error Code: {err_code}")
 
-        return req
+        return req.data.reshape(*dims)
 
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
+        is_int = False
         if all([isinstance(i, int) for i in key]):
             begin = [i for i in key]
             end = [i for i in key]
@@ -187,24 +210,16 @@ class VDS:
                         k.stop if k.stop else int(self._axis_descriptors[i].numSamples)
                     )
                 elif isinstance(k, int):
+                    is_int = True
                     begin.append(k)
-                    end.append(k)
+                    end.append(k+1)
         else:
             raise VDSException("Item key is not list of slices or int")
-        req = self._read_data(self._vds_source, begin, end)
 
-        dims = (
-            end[2] - begin[2],
-            end[1] - begin[1],
-            end[0] - begin[0],
-        )
-        dims = dims[::-1]
-
-        # if all([isinstance(i, slice) for i in key]):
-        #   return req.data.reshape(*dims).__getitem__(
-        #        [slice(None, None, k.step) for k in key]
-        #    )
-        return req.data.reshape(*dims)
+        if is_int:
+            return self._read_data(self._vds_source, begin, end).__getitem__(key)
+        else:
+            return self._read_data(self._vds_source, begin, end)
 
 
 class VDSComposite:
