@@ -21,8 +21,7 @@ def write_pages(accessor: openvds.core.VolumeDataPageAccessor, data: np.array):
 
 
 def write_zero_pages(accessor: openvds.core.VolumeDataPageAccessor):
-    chunks_count = accessor.getChunkCount()
-    for c in range(chunks_count):
+    for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False)
         buf[:, :, :] = np.zeros(buf.shape, dtype=float)
@@ -31,7 +30,6 @@ def write_zero_pages(accessor: openvds.core.VolumeDataPageAccessor):
 
 
 def write_empty_pages(accessor: openvds.core.VolumeDataPageAccessor, number_of_workers: int):
-
     chunks_count = accessor.getChunkCount()
     result = {}
     ranges = []
@@ -208,8 +206,7 @@ def create_default_vds_attributes(
     options=openvds.VolumeDataLayoutDescriptor.Options.Options_None,
     negative_margin: int = 0,
     positive_margin: int = 0,
-    full_resolution_dimension: int = 0,
-
+    full_resolution_dimension: int = 0
 ):
     layout_descriptor = openvds.VolumeDataLayoutDescriptor(
         brickSize=databrick_size,
@@ -325,5 +322,4 @@ def create_vds(
 
     if close:
         openvds.close(vds)
-
     return vds

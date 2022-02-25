@@ -1,8 +1,8 @@
 import os
 from tempfile import TemporaryDirectory
 
-from ovds_utils.vds import VDS
 from ovds_utils.ovds.enums import BrickSizes
+from ovds_utils.vds import VDS
 
 
 def test_vds_shape():

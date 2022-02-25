@@ -24,6 +24,7 @@ class VDS:
         super().__init__()
         self.path = path
         self.connection_string = connection_string
+        self._accessor = None
         try:
             self._vds_source = openvds.open(path, connection_string)
         except RuntimeError as e:
@@ -48,6 +49,7 @@ class VDS:
         self._axis_descriptors = [
             self._layout.getAxisDescriptor(dim) for dim in range(self._dimensionality)
         ]
+        self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
 
     def __del__(self):
         openvds.close(self._vds_source)
@@ -93,7 +95,13 @@ class VDS:
             close=True
         )
 
-    def get_accessor(
+    @property
+    def accessor(self):
+        if self._accessor is None:
+            raise VDSException("Accessor was not initialized use create_accessor method.")
+        return self._accessor
+
+    def create_accessor(
             self,
             access_mode: AccessModes = AccessModes.ReadWrite,
             lod: int = 0,
@@ -111,11 +119,29 @@ class VDS:
             maxPages=maxPages,
             chunkMetadataPageSize=chunkMetadataPageSize,
         )
-        return accessor
+        self._accessor = accessor
+        return self._accessor
+
+    def get_chunk_page(self, number: int) -> np.array:
+        if number not in set(range(self.chunks_count)):
+            raise VDSException(f"Chunk number is out of range of: 0 to {self.chunks_count-1}")
+        accessor = self.create_accessor()
+        page = accessor.createPage(number)
+        #buf = np.array(page.getWritableBuffer(), copy=False)
+        return page
 
     def write_pages(self, data: np.array) -> None:
         accessor = self.get_accessor()
         return write_pages(accessor, data)
+
+    @staticmethod
+    def count_number_of_chunks(shape: int, brick_size: BrickSizes):
+        x = [round(i/(2**brick_size.value.value)) for i in shape]
+        r = 1
+        for i in x:
+            if i != 0:
+                r *= i
+        return r
 
     @staticmethod
     def _read_data(
