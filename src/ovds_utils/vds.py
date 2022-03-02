@@ -195,7 +195,7 @@ class VDS:
             logger.exception(err_msg)
             raise RuntimeError(f"requestVolumeSubset failed! Message: {err_msg}, Error Code: {err_code}")
 
-        return req.data.reshape(*dims)
+        return req.data.reshape(*dims).swapaxes(0, 2)
 
     def _getitem_for_whole_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
         is_int = False
