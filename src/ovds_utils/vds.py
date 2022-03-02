@@ -1,3 +1,5 @@
+import enum
+from tracemalloc import start, stop
 from typing import AnyStr, Sequence, Union
 
 import numpy as np
@@ -195,11 +197,12 @@ class VDS:
 
         return req.data.reshape(*dims)
 
-    def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
+    def _getitem_for_whole_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
         is_int = False
         if all([isinstance(i, int) for i in key]):
             begin = [i for i in key]
-            end = [i for i in key]
+            end = [i+1 for i in key]
+            return self._read_data(self._vds_source, begin, end).__getitem__(tuple(0 for i in key))
         elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
             begin = []
             end = []
@@ -220,6 +223,34 @@ class VDS:
             return self._read_data(self._vds_source, begin, end).__getitem__(key)
         else:
             return self._read_data(self._vds_source, begin, end)
+
+    def _getitem_for_subset_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
+        # TODO: Add range checks
+        new_key = []
+        if all([isinstance(i, int) for i in key]):
+            new_key = [k+self.begin[i] for i, k in enumerate(key)]
+        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
+            for i, k in enumerate(key):
+                if isinstance(k, slice):
+                    new_key.append(
+                        slice(
+                            self.begin[i] + k.start if k.start else self.begin[i],
+                            self.begin[i] + k.stop if k.stop else self.end[i],
+                            None
+                        )
+                    )
+                elif isinstance(k, int):
+                    new_key.append(k+self.begin[i])
+        else:
+            raise VDSException("Item key is not list of slices or int")
+
+        return self._getitem_for_whole_dataset(tuple(new_key))
+
+    def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
+        if self.begin and self.end:
+            return self._getitem_for_subset_dataset(key)
+        else:
+            return self._getitem_for_whole_dataset(key)
 
 
 class VDSComposite:
