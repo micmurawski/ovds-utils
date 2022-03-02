@@ -1,5 +1,4 @@
-import enum
-from tracemalloc import start, stop
+from copy import deepcopy
 from typing import AnyStr, Sequence, Union
 
 import numpy as np
@@ -79,9 +78,9 @@ class VDS:
     def shape(self):
         if self.begin and self.end:
             return (
-                self.end[2] - self.begin[2],
-                self.end[1] - self.begin[1],
                 self.end[0] - self.begin[0],
+                self.end[1] - self.begin[1],
+                self.end[2] - self.begin[2],
             )
         return tuple(int(a.numSamples) for a in self._axis_descriptors)
 
@@ -296,32 +295,48 @@ class VDSComposite:
         if all([isinstance(i, slice) or isinstance(i, int) for i in key]):
             for i, k in enumerate(key):
                 if isinstance(k, slice):
-                    if k.start > self.shape[i] + 1 or k.stop > self.shape[i] + 1:
+                    if k.start is not None and (k.start > self.shape[i] + 1 or k.stop > self.shape[i] + 1):
                         raise Exception(f"{key} is out of range {self.shape}")
                 else:
                     if k >= self.shape[i]:
                         raise Exception(f"{key} is out of range {self.shape}")
 
             _slice = key[self.__slice_dim]
-            _slices = []
+            keys = []
             if isinstance(_slice, slice):
-                cnt = 0
+                a = 0
                 for i in range(len(self.__shapes)):
-                    b = cnt + self.__shapes[i][self.__slice_dim]
-                    if _slice.start >= cnt and _slice.stop < b:
-                        _slices.append(
-                            slice(_slice.start - cnt, _slice.stop - cnt, None)
+                    b = a + self.__shapes[i][0]
+
+                    if _slice.start < b:
+                        _slices = list(deepcopy(key))
+                        _slices[self.__slice_dim] = slice(
+                            0,
+                            self.__shapes[i][self.__slice_dim]
+                        )
+                        keys.append(
+                            tuple(_slices)
                         )
                     else:
-                        _slices.append(None)
+                        keys.append(
+                            None
+                        )
 
-                    cnt += self.__shapes[i][self.__slice_dim]
+                    if _slice.stop < b:
+                        _slices = list(deepcopy(keys[-1]))
+                        _slices[self.__slice_dim] = slice(
+                            0,
+                            _slice.stop - a
+                        )
+                        keys[-1] = tuple(_slices)
+                        break
+
+                    a += self.__shapes[i][0]
 
                 result_list = []
-                for i, s in enumerate(_slices):
+                for i, s in enumerate(keys):
                     if s:
-                        key[self.__slice_dim] = s
-                        result_list.append(self.__subsets[i].__getitem__(tuple(key)))
+                        result_list.append(self.__subsets[i].__getitem__(s))
                 return np.concatenate(tuple(result_list), axis=self.__slice_dim)
             elif isinstance(_slice, int):
                 cnt = 0
