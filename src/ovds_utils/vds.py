@@ -1,8 +1,5 @@
 from copy import deepcopy
-import enum
-from tkinter import E
 from typing import AnyStr, Sequence, Union
-from matplotlib.pyplot import bar_label
 
 import numpy as np
 import openvds
@@ -78,14 +75,20 @@ class VDS:
         return f"<{self.__class__.__qualname__}(path={self.path})>"
 
     @property
+    def axis_descriptors(self):
+        return tuple(
+            (a.name, a.unit, a.numSamples) for a in self._axis_descriptors[::-1]
+        )
+
+    @property
     def shape(self):
         if self.begin and self.end:
             return (
-                self.end[0] - self.begin[0],
-                self.end[1] - self.begin[1],
                 self.end[2] - self.begin[2],
+                self.end[1] - self.begin[1],
+                self.end[0] - self.begin[0],
             )
-        return tuple(int(a.numSamples) for a in self._axis_descriptors)
+        return tuple(int(a.numSamples) for a in self._axis_descriptors[::-1])
 
     @staticmethod
     def create(
@@ -147,7 +150,6 @@ class VDS:
             raise VDSException(f"Chunk number is out of range of: 0 to {self.chunks_count-1}")
         accessor = self.create_accessor()
         page = accessor.createPage(number)
-        # buf = np.array(page.getWritableBuffer(), copy=False)
         return page
 
     def write_pages(self, data: np.array) -> None:
@@ -173,14 +175,15 @@ class VDS:
         replacementNoValue: float = 0.0,
         channel: int = 0
     ):
+
+        begin = begin[::-1] + ([0]*len(begin))
+        end = end[::-1] + ([1]*len(end))
+
         dims = (
             end[2] - begin[2],
             end[1] - begin[1],
             end[0] - begin[0],
         )
-
-        begin = begin + ([0]*len(begin))
-        end = end + ([1]*len(end))
         accessManager = openvds.VolumeDataAccessManager(vds_source)
         req = accessManager.requestVolumeSubset(
             begin,  # start slice
@@ -197,7 +200,7 @@ class VDS:
             logger.exception(err_msg)
             raise RuntimeError(f"requestVolumeSubset failed! Message: {err_msg}, Error Code: {err_code}")
 
-        return req.data.reshape(*dims).swapaxes(0, 2)
+        return req.data.reshape(*dims)
 
     def _getitem_for_whole_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
         is_int = False
@@ -220,9 +223,12 @@ class VDS:
                     end.append(k+1)
         else:
             raise VDSException("Item key is not list of slices or int")
-
         if is_int:
-            return self._read_data(self._vds_source, begin, end).__getitem__(key)
+            return self._read_data(self._vds_source, begin, end).__getitem__(
+                tuple(
+                    slice(None, None) if isinstance(i, slice) else 0 for i in key
+                )
+            )
         else:
             return self._read_data(self._vds_source, begin, end)
 
@@ -325,13 +331,8 @@ class VDSComposite:
             b = a + self.__shapes[i][0]
             if _slice.start < b and (_slice.start == _slice.stop):
                 _slices = list(deepcopy(_key))
-                _slices[self.__slice_dim] = slice(
-                    0,
-                    _slice.stop - a
-                )
-                keys.append(
-                    tuple(_slices)
-                )
+                _slices[self.__slice_dim] = slice(0, _slice.stop - a)
+                keys.append(tuple(_slices))
                 break
             elif _slice.start < b:
                 _slices = list(deepcopy(_key))
@@ -339,19 +340,12 @@ class VDSComposite:
                     0,
                     self.__shapes[i][self.__slice_dim]
                 )
-                keys.append(
-                    tuple(_slices)
-                )
+                keys.append(tuple(_slices))
             else:
-                keys.append(
-                    None
-                )
+                keys.append(None)
             if _slice.stop < b:
                 _slices = list(deepcopy(keys[-1]))
-                _slices[self.__slice_dim] = slice(
-                    0,
-                    _slice.stop - a
-                )
+                _slices[self.__slice_dim] = slice(0, _slice.stop - a)
                 keys[-1] = tuple(_slices)
                 break
             a += self.__shapes[i][0]
@@ -359,8 +353,11 @@ class VDSComposite:
         for i, s in enumerate(keys):
             if s:
                 result_list.append(self.__subsets[i].__getitem__(s))
-
         if is_int:
-            return np.concatenate(tuple(result_list), axis=self.__slice_dim).__getitem__(key)
+            return np.concatenate(tuple(result_list), axis=self.__slice_dim).__getitem__(
+                tuple(
+                    slice(None, None) if isinstance(i, slice) else 0 for i in key
+                )
+            )
 
         return np.concatenate(tuple(result_list), axis=self.__slice_dim)

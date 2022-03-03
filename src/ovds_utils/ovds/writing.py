@@ -261,11 +261,14 @@ def create_vds(
     data=None,
     close=True
 ):
+    if shape:
+        shape = shape[::-1]
+
     if begin and end:
         shape = (
-            end[0] - begin[0],
-            end[1] - begin[1],
             end[2] - begin[2],
+            end[1] - begin[1],
+            end[0] - begin[0],
         )
     check_block_size(databrick_size, 1, shape, format, components)
 
