@@ -35,6 +35,40 @@ print(vds[:10,0,0])
 >>> [0.14836921 0.06490713 0.05770212 0.2364456  0.49000826 0.1573576
  0.5017615  0.456749   0.6573513  0.72831243]
 ```
+## Writing to VDS source chunk by chunk
 
+```python
+import numpy as np
+
+from ovds_utils.ovds.enums import BrickSizes
+from ovds_utils.vds import VDS
+
+shape = (251, 51, 126)
+data = np.random.rand(*shape).astype(np.float32)
+zeros = np.zeros(shape, dtype=np.float32)
+
+VDS(
+    path="example.vds",
+    connection_string="",
+    shape=shape,
+    data=data,
+    databrick_size=BrickSizes.BrickSize_64
+)
+readwrite_vds = VDS(
+    path="example.vds",
+    connection_string="",
+    databrick_size=BrickSizes.BrickSize_64
+)
+for chunk in readwrite_vds.get_chunks():
+    (min, max) = chunk.minmax
+    chunk[:, :, :] = data[
+        min[2]: max[2],
+        min[1]: max[1],
+        min[0]: max[0],
+    ]
+    chunk.release()
+readwrite_vds.commit()
+
+```
 ## Links
 * https://pypi.org/project/ovds-utils/

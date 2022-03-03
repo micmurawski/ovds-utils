@@ -24,3 +24,34 @@ def test_vds_shape():
                 np.array_equal(data[i, 0, :], vds[i, 0, :])
                 for i in range(shape[0])
             )
+
+
+def test_create_vds_by_chunks():
+    shape = (251, 51, 126)
+    data = np.random.rand(*shape).astype(np.float32)
+    with TemporaryDirectory() as dir:
+        shape = (251, 51, 126)
+        data = np.random.rand(*shape).astype(np.float32)
+        zeros = np.zeros(shape, dtype=np.float32)
+        with TemporaryDirectory() as dir:
+            VDS(
+                os.path.join(dir, "example.vds"),
+                "",
+                shape=shape,
+                data=zeros,
+                databrick_size=BrickSizes.BrickSize_64,
+            )
+            readwrite_vds = VDS(
+                os.path.join(dir, "example.vds"),
+                "",
+            )
+            chunks = readwrite_vds.get_chunks()
+            for chunk in chunks:
+                (min, max) = chunk.minmax
+                chunk[:, :, :] = data[
+                    min[2]: max[2],
+                    min[1]: max[1],
+                    min[0]: max[0],
+                ]
+                chunk.release()
+            readwrite_vds.commit()
