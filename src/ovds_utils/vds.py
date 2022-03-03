@@ -20,7 +20,9 @@ class VDS:
         shape: Sequence[int] = None,
         databrick_size: BrickSizes = BrickSizes.BrickSize_128,
         components: Components = Components.Components_1,
+        metadata_dict: MetadataContainer = None,
         format: Formats = Formats.R32,
+        data: np.array = None,
         begin: Sequence[int] = None,
         end: Sequence[int] = None,
     ) -> None:
@@ -41,7 +43,9 @@ class VDS:
                     path=path,
                     connection_string=connection_string,
                     shape=shape,
+                    metadata_dict=metadata_dict,
                     databrick_size=databrick_size,
+                    data=data,
                     access_mode=AccessModes.Create,
                     components=components,
                     format=format,
@@ -99,6 +103,7 @@ class VDS:
         access_mode=AccessModes.Create,
         components=Components.Components_1,
         format=Formats.R32,
+        metadata_dict: MetadataContainer = None,
         data: np.array = None,
         begin: Sequence[int] = None,
         end: Sequence[int] = None
@@ -109,10 +114,10 @@ class VDS:
             shape,
             databrick_size=databrick_size.value,
             access_mode=access_mode.value,
+            metadata_dict=metadata_dict if metadata_dict else {},
             components=components.value,
             format=format.value,
             data=data,
-            create_and_write_empty_pages=True,
             close=True,
             begin=begin,
             end=end
@@ -215,7 +220,7 @@ class VDS:
                 if isinstance(k, slice):
                     begin.append(k.start if k.start else 0)
                     end.append(
-                        k.stop if k.stop else int(self._axis_descriptors[i].numSamples)
+                        k.stop if k.stop else int(self._axis_descriptors[-(i+1)].numSamples)
                     )
                 elif isinstance(k, int):
                     is_int = True

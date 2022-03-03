@@ -5,11 +5,20 @@ import openvds
 
 from .utils import check_block_size, copy_ovds_metadata
 
+FORMAT2FLOAT = {
+    openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
+    openvds.VolumeDataChannelDescriptor.Format.Format_R32: np.float32
+}
 
-def write_pages(accessor: openvds.core.VolumeDataPageAccessor, data: np.array):
+
+def write_pages(
+    accessor: openvds.core.VolumeDataPageAccessor, data: np.array,
+    format: openvds.VolumeDataChannelDescriptor.Format
+):
+    dtype = FORMAT2FLOAT[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
-        buf = np.array(page.getWritableBuffer(), copy=False)
+        buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
         (min, max) = page.getMinMax()
         buf[:, :, :] = data[
             min[2]: max[2],
@@ -20,11 +29,15 @@ def write_pages(accessor: openvds.core.VolumeDataPageAccessor, data: np.array):
     accessor.commit()
 
 
-def write_zero_pages(accessor: openvds.core.VolumeDataPageAccessor):
+def write_zero_pages(
+    accessor: openvds.core.VolumeDataPageAccessor,
+    format: openvds.VolumeDataChannelDescriptor.Format
+):
+    dtype = FORMAT2FLOAT[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
-        buf = np.array(page.getWritableBuffer(), copy=False)
-        buf[:, :, :] = np.zeros(buf.shape, dtype=float)
+        buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
+        buf[:, :, :] = np.zeros(buf.shape, dtype=dtype)
         page.release()
     accessor.commit()
 
@@ -257,7 +270,6 @@ def create_vds(
     access_mode: openvds.IVolumeDataAccessManager.AccessMode = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_Create,  # NOQA
     components: openvds.VolumeDataChannelDescriptor.Components = openvds.VolumeDataChannelDescriptor.Components.Components_1,  # NOQA
     format: openvds.VolumeDataChannelDescriptor.Format = openvds.VolumeDataChannelDescriptor.Format.Format_R32,  # NOQA
-    create_and_write_empty_pages=True,
     data=None,
     close=True
 ):
@@ -271,7 +283,6 @@ def create_vds(
             end[0] - begin[0],
         )
     check_block_size(databrick_size, 1, shape, format, components)
-
     if vds_info is None:
         (
             layout_descriptor,
@@ -318,10 +329,10 @@ def create_vds(
         chunkMetadataPageSize=1024,
     )
 
-    if data:
-        write_pages(accessor, data)
+    if data is None:
+        write_zero_pages(accessor, format)
     else:
-        write_zero_pages(accessor) if create_and_write_empty_pages else None
+        write_pages(accessor, data, format)
 
     if close:
         openvds.close(vds)
