@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import AnyStr, List, Sequence, Tuple, Union
+from typing import AnyStr, Sequence, Tuple, Union
 
 import numpy as np
 import openvds
@@ -8,6 +8,7 @@ from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
 from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds, write_pages
+from ovds_utils.ovds.utils import get_vds_info
 from ovds_utils.ovds.writing import FORMAT2FLOAT
 
 logger = get_logger(__name__)
@@ -16,7 +17,6 @@ logger = get_logger(__name__)
 class VDSChunk:
     def __init__(
         self,
-        path: AnyStr,
         number: int,
         accessor: openvds.core.VolumeDataPageAccessor,
         page: openvds.core.VolumeDataPage,
@@ -24,14 +24,13 @@ class VDSChunk:
     ) -> None:
         super().__init__()
         self.is_released = False
-        self.path = path
         self.number = number
         self.accesor = accessor
         self.page = page
         self.format = format
 
     def __repr__(self) -> str:
-        return f"<VDSChunk(path={self.path}, number={self.number})>"
+        return f"<VDSChunk(number={self.number})>"
 
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
         dtype = FORMAT2FLOAT[self.format.value]
@@ -49,7 +48,73 @@ class VDSChunk:
 
     @property
     def minmax(self) -> Tuple[Sequence[int]]:
-        return self.page.getMinMax()
+        _min, _max = self.page.getMinMax()
+        _min = _min[:3][::-1]
+        _max = _max[:3][::-1]
+        return _min, _max
+
+    @property
+    def slices(self) -> Tuple[slice]:
+        return tuple(slice(i, j) for i, j in zip(*self.minmax))
+
+
+class VDSChunksGenerator:
+    def __init__(
+        self,
+        chunks_count: int,
+        accessor: openvds.core.VolumeDataPageAccessor,
+        format: Formats
+    ) -> None:
+        self.chunks_count = chunks_count
+        self.accessor = accessor
+        self.format = format
+
+    def __iter__(self):
+        self.n = 0
+        return self
+
+    def __next__(self):
+        if self.n <= self.chunks_count:
+            page = self.accessor.createPage(self.n)
+            self.n += 1
+            return VDSChunk(
+                number=self.n, accessor=self.accessor, page=page, format=self.format
+            )
+        else:
+            raise StopIteration
+
+
+class Channel:
+    def __init__(
+            self,
+            name: AnyStr,
+            format: Formats,
+            unit: AnyStr,
+            accessor: openvds.core.VolumeDataPageAccessor,
+            chunks_count: int
+    ) -> None:
+        self.name = name
+        self.format = format
+        self.unit = unit
+        self.accessor = accessor
+        self.chunks_count = chunks_count
+
+    def __repr__(self) -> str:
+        return f"<Channel(name={self.name}, unit={self.unit})>"
+
+    def get_chunks(self) -> VDSChunksGenerator:
+        return VDSChunksGenerator(chunks_count=self.chunks_count, accessor=self.accessor, format=self.format)
+
+    def get_chunk(self, number: int) -> VDSChunk:
+        if number not in set(range(self.chunks_count)):
+            raise VDSException(f"Chunk number is out of range of: 0 to {self.chunks_count-1}")
+        page = self.accessor.createPage(number)
+        return VDSChunk(
+            number=number, accessor=self.accessor, page=page, format=self.format
+        )
+
+    def commit(self):
+        self.accessor.commit()
 
 
 class VDS:
@@ -69,12 +134,12 @@ class VDS:
         super().__init__()
         self.path = path
         self.connection_string = connection_string
-        self._accessor = None
         self.begin = begin
         self.end = end
-        self.format = format
+        self._channels = {}
         try:
             self._vds_source = openvds.open(path, connection_string)
+            vds_info = get_vds_info(path, connection_string)
         except RuntimeError as e:
             if str(e) in ("Open error: File::open "):
                 if shape is None:
@@ -93,6 +158,7 @@ class VDS:
                     begin=begin,
                     end=end
                 )
+                self.format = format
                 self._vds_source = openvds.open(path, connection_string)
             else:
                 raise VDSException(f"Open VDS resulted with: {str(e)}") from e
@@ -102,12 +168,26 @@ class VDS:
             self._layout.getAxisDescriptor(dim) for dim in range(self._dimensionality)
         ]
         self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
+        vds_info = get_vds_info(path, connection_string)
+        for i, j in enumerate(vds_info['channelDescriptors']):
+            self._channels[j['name']] = Channel(
+                name=j['name'],
+                unit=j['unit'],
+                format=getattr(
+                    Formats, j['format'].replace("Format_", "")
+                ),
+                accessor=self._create_accessor(channel=i),
+                chunks_count=self.count_number_of_chunks(self.shape, databrick_size)
+            )
+
+    def channel(self, number: int) -> Channel:
+        return list(self._channels.values())[number]
+
+    def get_channel(self, name: AnyStr) -> Channel:
+        return self._channels[name]
 
     def __del__(self):
         openvds.close(self._vds_source)
-
-    def commit(self):
-        self.accessor.commit()
 
     def __enter__(self):
         return self
@@ -173,7 +253,7 @@ class VDS:
             raise VDSException("Accessor was not initialized use create_accessor method.")
         return self._accessor
 
-    def create_accessor(
+    def _create_accessor(
             self,
             access_mode: AccessModes = AccessModes.ReadWrite,
             lod: int = 0,
@@ -193,18 +273,6 @@ class VDS:
         )
         self._accessor = accessor
         return self._accessor
-
-    def get_chunks(self) -> List[VDSChunk]:
-        return [self.get_chunk(i) for i in range(self.chunks_count)]
-
-    def get_chunk(self, number: int) -> VDSChunk:
-        if number not in set(range(self.chunks_count)):
-            raise VDSException(f"Chunk number is out of range of: 0 to {self.chunks_count-1}")
-        accessor = self.create_accessor()
-        page = accessor.createPage(number)
-        return VDSChunk(
-            path=self.path, number=number, accessor=accessor, page=page, format=self.format
-        )
 
     def write_pages(self, data: np.array) -> None:
         accessor = self.get_accessor()

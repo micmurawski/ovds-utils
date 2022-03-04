@@ -45,13 +45,7 @@ def test_create_vds_by_chunks():
                 os.path.join(dir, "example.vds"),
                 "",
             )
-            chunks = readwrite_vds.get_chunks()
-            for chunk in chunks:
-                (min, max) = chunk.minmax
-                chunk[:, :, :] = data[
-                    min[2]: max[2],
-                    min[1]: max[1],
-                    min[0]: max[0],
-                ]
+            for chunk in list(readwrite_vds.channel(0).get_chunks()):
+                chunk[:, :, :] = data[chunk.slices]
                 chunk.release()
-            readwrite_vds.commit()
+            readwrite_vds.channel(0).commit()

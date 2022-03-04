@@ -59,15 +59,10 @@ readwrite_vds = VDS(
     connection_string="",
     databrick_size=BrickSizes.BrickSize_64
 )
-for chunk in readwrite_vds.get_chunks():
-    (min, max) = chunk.minmax
-    chunk[:, :, :] = data[
-        min[2]: max[2],
-        min[1]: max[1],
-        min[0]: max[0],
-    ]
+for chunk in list(readwrite_vds.channel(0).get_chunks()):
+    chunk[:, :, :] = data[chunk.slices]
     chunk.release()
-readwrite_vds.commit()
+readwrite_vds.channel(0).commit()
 
 ```
 ## Links
