@@ -43,21 +43,29 @@ import numpy as np
 from ovds_utils.ovds.enums import BrickSizes
 from ovds_utils.vds import VDS
 
-shape = (251, 51, 126)
-data = np.random.rand(*shape).astype(np.float32)
-zeros = np.zeros(shape, dtype=np.float32)
-
 vds = VDS(
-    path="example.vds",
-    connection_string="",
+    os.path.join(dir, "example.vds"),
+    "",
     shape=shape,
     data=zeros,
-    databrick_size=BrickSizes.BrickSize_64
+    metadata_dict=metadata,
+    format=Formats.R64,
+    databrick_size=BrickSizes.BrickSize_64,
+    channels=[
+        Channel(
+            name="Channel0",
+            format=Formats.R64,
+            unit="unitless",
+            value_range_min=0.0,
+            value_range_max=1000.0,
+            components=Components.Components_1
+        )
+    ]
 )
-for chunk in vds.channel(0).chunks():
-    chunk[:, :, :] = data[chunk.slices]
-    chunk.release()
-readwrite_vds.channel(0).commit()
+for c in vds.channel(0).chunks():
+    c[:, :, :] = data[c.slices]
+    c.release()
+vds.channel(0).commit()
 
 print(vds[:10,0,0])
 >>> [0.14836921 0.06490713 0.05770212 0.2364456  0.49000826 0.1573576
