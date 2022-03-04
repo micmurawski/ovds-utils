@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import AnyStr, Sequence, Tuple, Union
+from typing import AnyStr, List, Sequence, Tuple, Union
 
 import numpy as np
 import openvds
@@ -87,13 +87,16 @@ class VDSChunksGenerator:
 class Channel:
     def __init__(
             self,
-            vds_source,
-            shape: Sequence[int],
             name: AnyStr,
             format: Formats,
             unit: AnyStr,
-            accessor: openvds.core.VolumeDataPageAccessor,
-            chunks_count: int,
+            value_range_min: float,
+            value_range_max: float,
+            components: Components,
+            accessor: openvds.core.VolumeDataPageAccessor = None,
+            chunks_count: int = None,
+            vds_source=None,
+            shape: Sequence[int] = None,
             begin: Sequence[int] = None,
             end: Sequence[int] = None
     ) -> None:
@@ -106,6 +109,9 @@ class Channel:
         self.begin = begin
         self.end = end
         self.shape = shape
+        self.components = components
+        self.value_range_min = value_range_min
+        self.value_range_max = value_range_max
 
     def __repr__(self) -> str:
         return f"<Channel(name={self.name}, unit={self.unit})>"
@@ -229,6 +235,7 @@ class VDS:
         data: np.array = None,
         begin: Sequence[int] = None,
         end: Sequence[int] = None,
+        channels: List[Channel] = None,
     ) -> None:
         super().__init__()
         self.path = path
@@ -251,6 +258,7 @@ class VDS:
                     metadata_dict=metadata_dict,
                     databrick_size=databrick_size,
                     data=data,
+                    channels=channels,
                     access_mode=AccessModes.Create,
                     components=components,
                     format=format,
@@ -279,17 +287,20 @@ class VDS:
         ]
         self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
         vds_info = get_vds_info(path, connection_string)
-        for i, j in enumerate(vds_info['channelDescriptors']):
+        for i, j in enumerate(vds_info['layoutInfo']['channelDescriptors']):
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
                 begin=self.begin,
                 end=self.end,
                 shape=self.shape,
+                components=getattr(Components, j['components']),
                 name=j['name'],
                 unit=j['unit'],
                 format=getattr(
                     Formats, j['format'].replace("Format_", "")
                 ),
+                value_range_max=j['valueRange'][1],
+                value_range_min=j['valueRange'][0],
                 accessor=self._create_accessor(channel=i),
                 chunks_count=self.count_number_of_chunks(self.shape, databrick_size)
             )
@@ -344,7 +355,8 @@ class VDS:
         metadata_dict: MetadataContainer = None,
         data: np.array = None,
         begin: Sequence[int] = None,
-        end: Sequence[int] = None
+        end: Sequence[int] = None,
+        channels: List[Channel] = None,
     ):
         return create_vds(
             path,
@@ -355,6 +367,7 @@ class VDS:
             metadata_dict=metadata_dict if metadata_dict else {},
             components=components.value,
             format=format.value,
+            channels=channels,
             data=data,
             close=True,
             begin=begin,

@@ -219,7 +219,8 @@ def create_default_vds_attributes(
     options=openvds.VolumeDataLayoutDescriptor.Options.Options_None,
     negative_margin: int = 0,
     positive_margin: int = 0,
-    full_resolution_dimension: int = 0
+    full_resolution_dimension: int = 0,
+    channles=None
 ):
     layout_descriptor = openvds.VolumeDataLayoutDescriptor(
         brickSize=databrick_size,
@@ -244,17 +245,30 @@ def create_default_vds_attributes(
                 1000.0,
             )
         )
-
-    channel_descriptors = [
-        openvds.VolumeDataChannelDescriptor(
-            format=format,
-            components=components,
-            name="Channel0",
-            unit="unitless",
-            valueRangeMin=0.0,
-            valueRangeMax=1000.0,
-        )
-    ]
+    if channles is None:
+        channel_descriptors = [
+            openvds.VolumeDataChannelDescriptor(
+                format=format,
+                components=components,
+                name="Channel0",
+                unit="unitless",
+                valueRangeMin=0.0,
+                valueRangeMax=1000.0,
+            )
+        ]
+    else:
+        channel_descriptors = []
+        for c in channles:
+            channel_descriptors.append(
+                openvds.VolumeDataChannelDescriptor(
+                    format=c.format.value,
+                    components=c.components.value,
+                    name=c.name,
+                    unit=c.unit,
+                    valueRangeMin=c.value_range_min,
+                    valueRangeMax=c.value_range_max
+                )
+            )
     return layout_descriptor, axis_descriptors, channel_descriptors, metadata_container
 
 
@@ -266,6 +280,7 @@ def create_vds(
     vds_info: Dict[AnyStr, Any] = None,
     begin: Sequence[int] = None,
     end: Sequence[int] = None,
+    channels=None,
     databrick_size: openvds.VolumeDataLayoutDescriptor.BrickSize = openvds.VolumeDataLayoutDescriptor.BrickSize.BrickSize_128,  # NOQA
     access_mode: openvds.IVolumeDataAccessManager.AccessMode = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_Create,  # NOQA
     components: openvds.VolumeDataChannelDescriptor.Components = openvds.VolumeDataChannelDescriptor.Components.Components_1,  # NOQA
@@ -294,7 +309,8 @@ def create_vds(
             metadata_dict=metadata_dict,
             shape=shape,
             components=components,
-            format=format
+            format=format,
+            channles=channels
         )
     else:
         (
