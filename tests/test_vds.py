@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from ovds_utils.ovds.enums import BrickSizes
+from ovds_utils.ovds.enums import BrickSizes, Formats
 from ovds_utils.vds import VDS
 
 
@@ -28,24 +28,22 @@ def test_vds_shape():
 
 def test_create_vds_by_chunks():
     shape = (251, 51, 126)
-    data = np.random.rand(*shape).astype(np.float32)
+    dtype = np.float64
+    data = np.random.rand(*shape).astype(dtype)
     with TemporaryDirectory() as dir:
         shape = (251, 51, 126)
-        data = np.random.rand(*shape).astype(np.float32)
-        zeros = np.zeros(shape, dtype=np.float32)
+        data = np.random.rand(*shape).astype(dtype)
+        zeros = np.zeros(shape, dtype=dtype)
         with TemporaryDirectory() as dir:
-            VDS(
+            vds = VDS(
                 os.path.join(dir, "example.vds"),
                 "",
                 shape=shape,
                 data=zeros,
+                format=Formats.R64,
                 databrick_size=BrickSizes.BrickSize_64,
             )
-            readwrite_vds = VDS(
-                os.path.join(dir, "example.vds"),
-                ""
-            )
-            for chunk in list(readwrite_vds.channel(0).chunks()):
+            for chunk in vds.channel(0).chunks():
                 chunk[:, :, :] = data[chunk.slices]
                 chunk.release()
-            readwrite_vds.channel(0).commit()
+            vds.channel(0).commit()

@@ -47,22 +47,21 @@ shape = (251, 51, 126)
 data = np.random.rand(*shape).astype(np.float32)
 zeros = np.zeros(shape, dtype=np.float32)
 
-VDS(
+vds = VDS(
     path="example.vds",
     connection_string="",
     shape=shape,
-    data=data,
+    data=zeros,
     databrick_size=BrickSizes.BrickSize_64
 )
-readwrite_vds = VDS(
-    path="example.vds",
-    connection_string=""
-)
-for chunk in list(readwrite_vds.channel(0).chunks()):
+for chunk in vds.channel(0).chunks():
     chunk[:, :, :] = data[chunk.slices]
     chunk.release()
 readwrite_vds.channel(0).commit()
 
+print(vds[:10,0,0])
+>>> [0.14836921 0.06490713 0.05770212 0.2364456  0.49000826 0.1573576
+ 0.5017615  0.456749   0.6573513  0.72831243]
 ```
 ## Links
 * https://pypi.org/project/ovds-utils/

@@ -7,7 +7,7 @@ import openvds
 from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
-from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds, write_pages
+from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds
 from ovds_utils.ovds.utils import get_vds_info
 from ovds_utils.ovds.writing import FORMAT2FLOAT
 
@@ -87,17 +87,25 @@ class VDSChunksGenerator:
 class Channel:
     def __init__(
             self,
+            vds_source,
+            shape: Sequence[int],
             name: AnyStr,
             format: Formats,
             unit: AnyStr,
             accessor: openvds.core.VolumeDataPageAccessor,
-            chunks_count: int
+            chunks_count: int,
+            begin: Sequence[int] = None,
+            end: Sequence[int] = None
     ) -> None:
+        self._vds_source = vds_source
         self.name = name
         self.format = format
         self.unit = unit
         self.accessor = accessor
         self.chunks_count = chunks_count
+        self.begin = begin
+        self.end = end
+        self.shape = shape
 
     def __repr__(self) -> str:
         return f"<Channel(name={self.name}, unit={self.unit})>"
@@ -112,6 +120,97 @@ class Channel:
         return VDSChunk(
             number=number, accessor=self.accessor, page=page, format=self.format
         )
+
+    def _read_data(
+        self,
+        vds_source: openvds.core.VDS,
+        begin: Sequence[int],
+        end: Sequence[int],
+        lod: int = 0,
+        replacementNoValue: float = 0.0,
+        channel: int = 0
+    ):
+        begin = begin[::-1] + ([0]*len(begin))
+        end = end[::-1] + ([1]*len(end))
+
+        dims = (
+            end[2] - begin[2],
+            end[1] - begin[1],
+            end[0] - begin[0],
+        )
+        accessManager = openvds.VolumeDataAccessManager(vds_source)
+        req = accessManager.requestVolumeSubset(
+            begin,  # start slice
+            end,  # end slice
+            format=self.format.value,
+            lod=lod,
+            replacementNoValue=replacementNoValue,
+            channel=channel,
+        )
+
+        if req.data is None:
+            err_code, err_msg = accessManager.getCurrentDownloadError()
+            logger.exception(err_code)
+            logger.exception(err_msg)
+            raise RuntimeError(f"requestVolumeSubset failed! Message: {err_msg}, Error Code: {err_code}")
+
+        return req.data.reshape(*dims)
+
+    def _getitem_for_whole_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
+        is_int = False
+        if all([isinstance(i, int) for i in key]):
+            begin = [i for i in key]
+            end = [i+1 for i in key]
+            return self._read_data(self._vds_source, begin, end).__getitem__(tuple(0 for i in key))
+        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
+            begin = []
+            end = []
+            for i, k in enumerate(key):
+                if isinstance(k, slice):
+                    begin.append(k.start if k.start else 0)
+                    end.append(k.stop if k.stop else self.shape[i])
+                elif isinstance(k, int):
+                    is_int = True
+                    begin.append(k)
+                    end.append(k+1)
+        else:
+            raise VDSException("Item key is not list of slices or int")
+        if is_int:
+            return self._read_data(self._vds_source, begin, end).__getitem__(
+                tuple(
+                    slice(None, None) if isinstance(i, slice) else 0 for i in key
+                )
+            )
+        else:
+            return self._read_data(self._vds_source, begin, end)
+
+    def _getitem_for_subset_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
+        # TODO: Add range checks
+        new_key = []
+        if all([isinstance(i, int) for i in key]):
+            new_key = [k+self.begin[i] for i, k in enumerate(key)]
+        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
+            for i, k in enumerate(key):
+                if isinstance(k, slice):
+                    new_key.append(
+                        slice(
+                            self.begin[i] + k.start if k.start else self.begin[i],
+                            self.begin[i] + k.stop if k.stop else self.end[i],
+                            None
+                        )
+                    )
+                elif isinstance(k, int):
+                    new_key.append(k+self.begin[i])
+        else:
+            raise VDSException("Item key is not list of slices or int")
+
+        return self._getitem_for_whole_dataset(tuple(new_key))
+
+    def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
+        if self.begin and self.end:
+            return self._getitem_for_subset_dataset(key)
+        else:
+            return self._getitem_for_whole_dataset(key)
 
     def commit(self):
         self.accessor.commit()
@@ -158,8 +257,19 @@ class VDS:
                     begin=begin,
                     end=end
                 )
-                self.format = format
-                self._vds_source = openvds.open(path, connection_string)
+                self = self.__init__(
+                    path=path,
+                    connection_string=connection_string,
+                    shape=shape,
+                    databrick_size=databrick_size,
+                    components=components,
+                    metadata_dict=metadata_dict,
+                    format=format,
+                    data=data,
+                    begin=begin,
+                    end=end
+                )
+                return
             else:
                 raise VDSException(f"Open VDS resulted with: {str(e)}") from e
         self._layout = openvds.getLayout(self._vds_source)
@@ -171,6 +281,10 @@ class VDS:
         vds_info = get_vds_info(path, connection_string)
         for i, j in enumerate(vds_info['channelDescriptors']):
             self._channels[j['name']] = Channel(
+                vds_source=self._vds_source,
+                begin=self.begin,
+                end=self.end,
+                shape=self.shape,
                 name=j['name'],
                 unit=j['unit'],
                 format=getattr(
@@ -274,10 +388,6 @@ class VDS:
         self._accessor = accessor
         return self._accessor
 
-    def write_pages(self, data: np.array) -> None:
-        accessor = self.get_accessor()
-        return write_pages(accessor, data)
-
     @staticmethod
     def count_number_of_chunks(shape: int, brick_size: BrickSizes):
         x = [round(i/(2**brick_size.value.value)) for i in shape]
@@ -287,100 +397,8 @@ class VDS:
                 r *= i
         return r
 
-    @staticmethod
-    def _read_data(
-        vds_source: openvds.core.VDS,
-        begin: Sequence[int],
-        end: Sequence[int],
-        format=Formats.R32,
-        lod: int = 0,
-        replacementNoValue: float = 0.0,
-        channel: int = 0
-    ):
-
-        begin = begin[::-1] + ([0]*len(begin))
-        end = end[::-1] + ([1]*len(end))
-
-        dims = (
-            end[2] - begin[2],
-            end[1] - begin[1],
-            end[0] - begin[0],
-        )
-        accessManager = openvds.VolumeDataAccessManager(vds_source)
-        req = accessManager.requestVolumeSubset(
-            begin,  # start slice
-            end,  # end slice
-            format=format.value,
-            lod=lod,
-            replacementNoValue=replacementNoValue,
-            channel=channel,
-        )
-
-        if req.data is None:
-            err_code, err_msg = accessManager.getCurrentDownloadError()
-            logger.exception(err_code)
-            logger.exception(err_msg)
-            raise RuntimeError(f"requestVolumeSubset failed! Message: {err_msg}, Error Code: {err_code}")
-
-        return req.data.reshape(*dims)
-
-    def _getitem_for_whole_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
-        is_int = False
-        if all([isinstance(i, int) for i in key]):
-            begin = [i for i in key]
-            end = [i+1 for i in key]
-            return self._read_data(self._vds_source, begin, end).__getitem__(tuple(0 for i in key))
-        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
-            begin = []
-            end = []
-            for i, k in enumerate(key):
-                if isinstance(k, slice):
-                    begin.append(k.start if k.start else 0)
-                    end.append(
-                        k.stop if k.stop else int(self._axis_descriptors[-(i+1)].numSamples)
-                    )
-                elif isinstance(k, int):
-                    is_int = True
-                    begin.append(k)
-                    end.append(k+1)
-        else:
-            raise VDSException("Item key is not list of slices or int")
-        if is_int:
-            return self._read_data(self._vds_source, begin, end).__getitem__(
-                tuple(
-                    slice(None, None) if isinstance(i, slice) else 0 for i in key
-                )
-            )
-        else:
-            return self._read_data(self._vds_source, begin, end)
-
-    def _getitem_for_subset_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
-        # TODO: Add range checks
-        new_key = []
-        if all([isinstance(i, int) for i in key]):
-            new_key = [k+self.begin[i] for i, k in enumerate(key)]
-        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
-            for i, k in enumerate(key):
-                if isinstance(k, slice):
-                    new_key.append(
-                        slice(
-                            self.begin[i] + k.start if k.start else self.begin[i],
-                            self.begin[i] + k.stop if k.stop else self.end[i],
-                            None
-                        )
-                    )
-                elif isinstance(k, int):
-                    new_key.append(k+self.begin[i])
-        else:
-            raise VDSException("Item key is not list of slices or int")
-
-        return self._getitem_for_whole_dataset(tuple(new_key))
-
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
-        if self.begin and self.end:
-            return self._getitem_for_subset_dataset(key)
-        else:
-            return self._getitem_for_whole_dataset(key)
+        return self.channel(0).__getitem__(key)
 
 
 class VDSComposite:
