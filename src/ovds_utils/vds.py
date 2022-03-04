@@ -114,7 +114,7 @@ class Channel:
         self.value_range_max = value_range_max
 
     def __repr__(self) -> str:
-        return f"<Channel(name={self.name}, unit={self.unit})>"
+        return f"<Channel(name={self.name}, unit={self.unit}, format={self.format.name})>"
 
     def chunks(self) -> VDSChunksGenerator:
         return VDSChunksGenerator(chunks_count=self.chunks_count, accessor=self.accessor, format=self.format)
@@ -243,6 +243,8 @@ class VDS:
         self.begin = begin
         self.end = end
         self._channels = {}
+        if data is not None and shape is None:
+            shape = data.shape
         try:
             self._vds_source = openvds.open(path, connection_string)
             vds_info = get_vds_info(path, connection_string)
@@ -287,7 +289,8 @@ class VDS:
         ]
         self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
         vds_info = get_vds_info(path, connection_string)
-        for i, j in enumerate(vds_info['layoutInfo']['channelDescriptors']):
+        _info = vds_info['layoutInfo'] if 'layoutInfo' in vds_info else vds_info
+        for i, j in enumerate(_info['channelDescriptors']):
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
                 begin=self.begin,

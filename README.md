@@ -40,16 +40,19 @@ print(vds[:10,0,0])
 ```python
 import numpy as np
 
-from ovds_utils.ovds.enums import BrickSizes
-from ovds_utils.vds import VDS
+from ovds_utils.metadata import MetadataTypes, MetadataValue
+from ovds_utils.ovds.enums import BrickSizes, Formats
+from ovds_utils.vds import VDS, Channel, Components, Formats
+
+metadata = {
+    "example": MetadataValue(value="value", category="category#1", type=MetadataTypes.String)
+}
 
 vds = VDS(
-    os.path.join(dir, "example.vds"),
-    "",
+    "example.vds",
     shape=shape,
     data=zeros,
     metadata_dict=metadata,
-    format=Formats.R64,
     databrick_size=BrickSizes.BrickSize_64,
     channels=[
         Channel(
