@@ -48,9 +48,12 @@ metadata = {
     "example": MetadataValue(value="value", category="category#1", type=MetadataTypes.String)
 }
 
+shape = (251, 51, 126)
+data = np.random.rand(*shape).astype(np.float64)
+zeros = np.zeros(shape, dtype=np.float64)
+
 vds = VDS(
     "example.vds",
-    shape=shape,
     data=zeros,
     metadata_dict=metadata,
     databrick_size=BrickSizes.BrickSize_64,
