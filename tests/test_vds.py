@@ -43,9 +43,9 @@ def test_create_vds_by_chunks():
             )
             readwrite_vds = VDS(
                 os.path.join(dir, "example.vds"),
-                "",
+                ""
             )
-            for chunk in list(readwrite_vds.channel(0).get_chunks()):
+            for chunk in list(readwrite_vds.channel(0).chunks()):
                 chunk[:, :, :] = data[chunk.slices]
                 chunk.release()
             readwrite_vds.channel(0).commit()

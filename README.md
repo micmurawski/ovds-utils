@@ -56,10 +56,9 @@ VDS(
 )
 readwrite_vds = VDS(
     path="example.vds",
-    connection_string="",
-    databrick_size=BrickSizes.BrickSize_64
+    connection_string=""
 )
-for chunk in list(readwrite_vds.channel(0).get_chunks()):
+for chunk in list(readwrite_vds.channel(0).chunks()):
     chunk[:, :, :] = data[chunk.slices]
     chunk.release()
 readwrite_vds.channel(0).commit()

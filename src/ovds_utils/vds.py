@@ -102,7 +102,7 @@ class Channel:
     def __repr__(self) -> str:
         return f"<Channel(name={self.name}, unit={self.unit})>"
 
-    def get_chunks(self) -> VDSChunksGenerator:
+    def chunks(self) -> VDSChunksGenerator:
         return VDSChunksGenerator(chunks_count=self.chunks_count, accessor=self.accessor, format=self.format)
 
     def get_chunk(self, number: int) -> VDSChunk:
