@@ -3,19 +3,14 @@ from typing import Any, AnyStr, Dict, Sequence
 import numpy as np
 import openvds
 
-from .utils import check_block_size, copy_ovds_metadata
-
-FORMAT2FLOAT = {
-    openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
-    openvds.VolumeDataChannelDescriptor.Format.Format_R32: np.float32
-}
+from .utils import FORMAT2DTYPE, check_block_size, copy_ovds_metadata
 
 
 def write_pages(
     accessor: openvds.core.VolumeDataPageAccessor, data: np.array,
     format: openvds.VolumeDataChannelDescriptor.Format
 ):
-    dtype = FORMAT2FLOAT[format]
+    dtype = FORMAT2DTYPE[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
@@ -33,7 +28,7 @@ def write_zero_pages(
     accessor: openvds.core.VolumeDataPageAccessor,
     format: openvds.VolumeDataChannelDescriptor.Format
 ):
-    dtype = FORMAT2FLOAT[format]
+    dtype = FORMAT2DTYPE[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)

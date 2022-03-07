@@ -2,6 +2,7 @@ import json
 from subprocess import PIPE, Popen
 from typing import Any, AnyStr, Dict, Sequence
 
+import numpy as np
 import openvds
 from humanfriendly import format_size
 
@@ -9,6 +10,21 @@ from ovds_utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+FORMAT2DTYPE = {
+    openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
+    openvds.VolumeDataChannelDescriptor.Format.Format_R32: np.float32,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U8: np.uint8,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U16: np.uint16,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U32: np.uint32
+}
+
+DTYPE2FORMAT = {
+    np.float32: openvds.VolumeDataChannelDescriptor.Format.Format_R32,
+    np.float64: openvds.VolumeDataChannelDescriptor.Format.Format_R64,
+    np.uint8: openvds.VolumeDataChannelDescriptor.Format.Format_U8,
+    np.uint16: openvds.VolumeDataChannelDescriptor.Format.Format_U16,
+    np.uint32: openvds.VolumeDataChannelDescriptor.Format.Format_U32,
+}
 
 METADATATYPE2GETFUNCTION = {
     "MetadataType.IntVector2": openvds.core.VolumeDataLayout.getMetadataIntVector2,

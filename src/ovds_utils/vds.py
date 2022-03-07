@@ -8,8 +8,7 @@ from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
 from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds
-from ovds_utils.ovds.utils import get_vds_info
-from ovds_utils.ovds.writing import FORMAT2FLOAT
+from ovds_utils.ovds.utils import DTYPE2FORMAT, FORMAT2DTYPE, get_vds_info
 
 logger = get_logger(__name__)
 
@@ -33,12 +32,12 @@ class VDSChunk:
         return f"<VDSChunk(number={self.number})>"
 
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
-        dtype = FORMAT2FLOAT[self.format.value]
+        dtype = FORMAT2DTYPE[self.format.value]
         buf = np.array(self.page.getWritableBuffer(), copy=False, dtype=dtype)
         return buf.__getitem__(key)
 
     def __setitem__(self, key: Sequence[Union[int, slice]], value: np.array):
-        dtype = FORMAT2FLOAT[self.format.value]
+        dtype = FORMAT2DTYPE[self.format.value]
         buf = np.array(self.page.getWritableBuffer(), copy=False, dtype=dtype)
         return buf.__setitem__(key, value)
 
@@ -245,6 +244,7 @@ class VDS:
         self._channels = {}
         if data is not None and shape is None:
             shape = data.shape
+            format = DTYPE2FORMAT[data.dtype]
         try:
             self._vds_source = openvds.open(path, connection_string)
             vds_info = get_vds_info(path, connection_string)
