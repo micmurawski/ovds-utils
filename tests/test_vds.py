@@ -47,6 +47,7 @@ def test_create_vds_by_chunks():
                 channels=[
                     Channel(
                         name="Channel0",
+                        channel_idx=0,
                         format=Formats.R64,
                         unit="unitless",
                         value_range_min=0.0,

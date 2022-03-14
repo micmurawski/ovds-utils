@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from copy import deepcopy
 from typing import AnyStr, List, Sequence, Tuple, Union
 
@@ -8,6 +9,7 @@ from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
 from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds
+from ovds_utils.ovds.reading import get_volume_sample
 from ovds_utils.ovds.utils import get_vds_info
 from ovds_utils.ovds.writing import FORMAT2FLOAT
 
@@ -88,6 +90,7 @@ class Channel:
     def __init__(
             self,
             name: AnyStr,
+            channel_idx: int,
             format: Formats,
             unit: AnyStr,
             value_range_min: float,
@@ -102,6 +105,7 @@ class Channel:
     ) -> None:
         self._vds_source = vds_source
         self.name = name
+        self.channel_idx = channel_idx
         self.format = format
         self.unit = unit
         self.accessor = accessor
@@ -125,6 +129,13 @@ class Channel:
         page = self.accessor.createPage(number)
         return VDSChunk(
             number=number, accessor=self.accessor, page=page, format=self.format
+        )
+
+    def get_volume_sample(self, key: Sequence[Union[slice, int]], lod: int = 0,
+                          interpolation_method=openvds.core.InterpolationMethod.Linear):
+        return get_volume_sample(
+            key=key, vds=self._vds_source, lod=lod,
+            channel_idx=self.channel_idx, interpolation_method=interpolation_method
         )
 
     def _read_data(
@@ -242,7 +253,7 @@ class VDS:
         self.connection_string = connection_string
         self.begin = begin
         self.end = end
-        self._channels = {}
+        self._channels = OrderedDict()
         if data is not None and shape is None:
             shape = data.shape
         try:
@@ -293,6 +304,7 @@ class VDS:
         for i, j in enumerate(_info['channelDescriptors']):
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
+                channel_idx=i,
                 begin=self.begin,
                 end=self.end,
                 shape=self.shape,
