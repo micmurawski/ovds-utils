@@ -60,3 +60,23 @@ def test_create_vds_by_chunks():
                 chunk[:, :, :] = data[chunk.slices]
                 chunk.release()
             vds.channel(0).commit()
+
+
+def test_vds_get_volume_sample():
+    shape = (251, 51, 126)
+    data = np.random.rand(*shape).astype(np.float32)
+    with TemporaryDirectory() as dir:
+        vds = VDS(
+            os.path.join(dir, "example.vds"),
+            "",
+            shape=shape,
+            data=data,
+            databrick_size=BrickSizes.BrickSize_128
+        )
+        key = (
+            slice(10, 251, 2),
+            slice(30, 51, 1),
+            slice(64, 126, 4)
+        )
+        data2 = vds.channel(0).get_volume_sample(key)
+        assert data2[0, 0, 0] == data.__getitem__(key)[0, 0, 0]

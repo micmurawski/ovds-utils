@@ -1,4 +1,5 @@
 from itertools import product
+from math import ceil
 from typing import List, Sequence, Tuple
 
 import openvds
@@ -9,7 +10,7 @@ def key2gen(key: Sequence[slice], shape: Tuple[int]):
 
 
 def key2shape(key: Sequence[slice], shape: Tuple[int]):
-    return tuple(round(((k.stop or s)-(k.start or 0))/(k.step or 1)) for k, s in zip(key, shape))
+    return tuple(ceil(((k.stop or s)-(k.start or 0))/(k.step or 1)) for k, s in zip(key, shape))
 
 
 def get_sample_position(coord_tuple, axis_descriptors: List[openvds.core.VolumeDataAxisDescriptor]):
@@ -27,8 +28,8 @@ def get_volume_sample(key, vds, lod=0, channel_idx=0, interpolation_method=openv
     axis_descriptors = [
         layout.getAxisDescriptor(dim) for dim in range(layout.getDimensionality())
     ]
-    shape = tuple(int(a.numSamples) for a in axis_descriptors[::-1])
-    shape = key2shape(key, shape)
+    shape = tuple(int(a.numSamples) for a in axis_descriptors)[::-1]
+    _shape = key2shape(key, shape)
     gen = key2gen(key, shape)
     accessManager = openvds.VolumeDataAccessManager(vds)
     channelDescriptors = [
@@ -43,4 +44,4 @@ def get_volume_sample(key, vds, lod=0, channel_idx=0, interpolation_method=openv
         channel=channel_idx,
         interpolationMethod=interpolation_method,
     )
-    return req.data.reshape(shape)
+    return req.data.reshape(_shape)
