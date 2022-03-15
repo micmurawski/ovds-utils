@@ -7,6 +7,7 @@ import openvds
 from humanfriendly import format_size
 
 from ovds_utils.logging import get_logger
+from ovds_utils.ovds.enums import Formats
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,23 @@ DTYPE2FORMAT = {
     np.uint16: openvds.VolumeDataChannelDescriptor.Format.Format_U16,
     np.uint32: openvds.VolumeDataChannelDescriptor.Format.Format_U32,
 }
+
+DTYPE2FORMATENUM = {
+    np.float32: Formats.R32,
+    np.float64: Formats.R64,
+    np.uint8: Formats.U8,
+    np.uint16: Formats.U16,
+    np.uint32: Formats.U32,
+}
+
+ENUMFORMAT2DTYPE = {
+    Formats.R64: np.float64,
+    Formats.R32: np.float32,
+    Formats.U8: np.uint8,
+    Formats.U16: np.uint16,
+    Formats.U32: np.uint32
+}
+
 
 METADATATYPE2GETFUNCTION = {
     "MetadataType.IntVector2": openvds.core.VolumeDataLayout.getMetadataIntVector2,
@@ -70,7 +88,7 @@ def get_element_size(format: openvds.core.VolumeDataFormat, components: openvds.
     ):
         return 8 * components.value
     else:
-        raise Exception("Illegal format")
+        raise Exception("Illegal format", format, components)
 
 
 def check_block_size(

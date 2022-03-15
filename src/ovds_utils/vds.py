@@ -8,7 +8,7 @@ from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
 from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds
-from ovds_utils.ovds.utils import DTYPE2FORMAT, FORMAT2DTYPE, get_vds_info
+from ovds_utils.ovds.utils import DTYPE2FORMATENUM, FORMAT2DTYPE, get_vds_info
 
 logger = get_logger(__name__)
 
@@ -244,7 +244,7 @@ class VDS:
         self._channels = {}
         if data is not None and shape is None:
             shape = data.shape
-            format = DTYPE2FORMAT[data.dtype]
+            format = DTYPE2FORMATENUM[getattr(np, str(data.dtype))]
         try:
             self._vds_source = openvds.open(path, connection_string)
             vds_info = get_vds_info(path, connection_string)
