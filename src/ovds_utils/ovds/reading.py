@@ -27,16 +27,16 @@ def get_volume_sample(key, vds, lod=0, channel_idx=0, interpolation_method=openv
     layout = openvds.getLayout(vds)
     axis_descriptors = [
         layout.getAxisDescriptor(dim) for dim in range(layout.getDimensionality())
-    ]
-    shape = tuple(int(a.numSamples) for a in axis_descriptors)[::-1]
+    ][::-1]
+    shape = tuple(int(a.numSamples) for a in axis_descriptors)
     _shape = key2shape(key, shape)
     gen = key2gen(key, shape)
     accessManager = openvds.VolumeDataAccessManager(vds)
     channelDescriptors = [
         layout.getChannelDescriptor(dim) for dim in range(layout.getChannelCount())
     ]
-    channel = channelDescriptors[0]
-    positions = [get_sample_position(p, axis_descriptors) for p in gen]
+    channel = channelDescriptors[channel_idx]
+    positions = [get_sample_position(p, axis_descriptors) for p in [(10,10,10)]]
     req = accessManager.requestVolumeSamples(
         positions,
         lod=lod,
@@ -44,4 +44,4 @@ def get_volume_sample(key, vds, lod=0, channel_idx=0, interpolation_method=openv
         channel=channel_idx,
         interpolationMethod=interpolation_method,
     )
-    return req.data.reshape(_shape)
+    return req.data
