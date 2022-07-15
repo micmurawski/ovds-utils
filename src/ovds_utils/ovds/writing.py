@@ -4,6 +4,7 @@ import numpy as np
 import openvds
 
 from .utils import check_block_size, copy_ovds_metadata
+from .enums import Dimensions
 
 FORMAT2FLOAT = {
     openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
@@ -234,12 +235,12 @@ def create_default_vds_attributes(
     metadata_container = openvds.MetadataContainer()
     copy_ovds_metadata(metadata_dict, metadata_container)
     axis_descriptors = []
-
+    axis_name_default = ["Sample", "Crossline", "Inline"]
     for i, size in enumerate(shape):
         axis_descriptors.append(
             openvds.VolumeDataAxisDescriptor(
                 size,
-                f"X{i}",
+                axis_name_default[i] if i < 3 else f"X{i}",
                 "unitless",
                 -1000.0,
                 1000.0,
@@ -337,12 +338,11 @@ def create_vds(
     )
     access_manager = openvds.getAccessManager(vds)
     accessor = access_manager.createVolumeDataPageAccessor(
-        dimensionsND=openvds.DimensionsND.Dimensions_012,
+        dimensionsND=Dimensions.Dimensions_012.value,
         accessMode=access_mode,
         lod=0,
         channel=0,
         maxPages=8,
-        chunkMetadataPageSize=1024,
     )
 
     if data is None:
