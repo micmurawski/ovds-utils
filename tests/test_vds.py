@@ -59,3 +59,19 @@ def test_create_vds_by_chunks():
                 chunk[:, :, :] = data[chunk.slices]
                 chunk.release()
             vds.channel(0).commit()
+
+def test_vds_3d_cube_default_axis_name():
+    """tests if default axis descriptors preserve naming convention in case of 3D cubes"""
+    shape = (251, 51, 126)
+    data = np.random.rand(*shape).astype(np.float32)
+    with TemporaryDirectory() as dir:
+        vds = VDS(
+            os.path.join(dir, "example.vds"),
+            "",
+            shape=shape,
+            data=data,
+            databrick_size=BrickSizes.BrickSize_128
+        )
+        vds.axis_descriptors[0] == ("Sample", "unitless", 126)
+        vds.axis_descriptors[1] == ("Crossline", "unitless", 51)
+        vds.axis_descriptors[2] == ("Inline", "unitless", 251)
