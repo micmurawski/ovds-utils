@@ -28,7 +28,7 @@ distclean: python_distclean
 .PHONY: python_test
 python_test: $(PYTHON_VENV) install_dependencies requirements-dev.txt
 	$(call in_venv,$(PIP) install --no-cache --requirement requirements-dev.txt)
-	$(call in_venv,$(PYTEST) --cov-config pytest.ini --cov=$(COV) \
+	$(call in_venv,$(PYTEST) --cov=$(COV) \
 		-s tests \
 		--cov-report xml \
 		--cov-report term-missing \
