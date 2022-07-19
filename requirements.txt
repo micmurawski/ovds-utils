@@ -1,2 +1,2 @@
-openvds>=2.3.0
+openvds>=2.2.0,<3.0.0
 humanfriendly>=10.0 
