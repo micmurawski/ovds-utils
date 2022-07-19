@@ -1,23 +1,9 @@
-name: Tests
+name: Publish
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 jobs:
-  test:
-    name: "Tests"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.7' 
-      - name: Create venv
-        run: make venv
-      - name: Run tests
-        run: make test
   publish:
       name: "Publish in PyPi"
       runs-on: ubuntu-latest
