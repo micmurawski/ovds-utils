@@ -3,7 +3,7 @@ from typing import Any, AnyStr, Dict, Union
 import openvds
 
 from ovds_utils.exceptions import VDSMetadataException
-from ovds_utils.ovds import METADATATYPE2GETFUNCTION, METADATATYPE2SETFUNCTION, MetadataTypes
+from ovds_utils.ovds import METADATATYPE_TO_OVDS_GET_FUNCTION, METADATATYPE_TO_OVDS_SET_FUNCTION, MetadataTypes
 
 
 class MetadataValue:
@@ -12,9 +12,9 @@ class MetadataValue:
         self.category = category
         if isinstance(type, MetadataTypes):
             self._type = type
-        elif str(type) not in METADATATYPE2GETFUNCTION:
+        elif str(type) not in METADATATYPE_TO_OVDS_GET_FUNCTION:
             raise VDSMetadataException(
-                f"The type {type} was not recognized among: {', '.join(METADATATYPE2GETFUNCTION.keys())}")
+                f"The type {type} was not recognized among: {', '.join(METADATATYPE_TO_OVDS_GET_FUNCTION.keys())}")
         else:
             self._type = getattr(MetadataTypes, str(type).replace("MetadataType.", ""))
 
@@ -37,7 +37,7 @@ class MetadataContainer(dict):
     def get_container(self):
         container = openvds.MetadataContainer()
         for k, v in self.items():
-            set_method = METADATATYPE2SETFUNCTION[v.type]
+            set_method = METADATATYPE_TO_OVDS_SET_FUNCTION[v.type]
             set_method(container, v.category, k, v.value)
         return container
 
@@ -45,7 +45,7 @@ class MetadataContainer(dict):
     def get_from_layout(layout: openvds.core.VolumeDataLayout) -> openvds.core.MetadataContainer:
         metadata = {}
         for i in layout.getMetadataKeys():
-            method = METADATATYPE2GETFUNCTION[str(i.type)]
+            method = METADATATYPE_TO_OVDS_GET_FUNCTION[str(i.type)]
             value = method(layout, i.category, i.name)
             metadata[i.name] = MetadataValue(value, i.category, i.type)
 

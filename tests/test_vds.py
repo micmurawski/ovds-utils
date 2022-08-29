@@ -60,6 +60,7 @@ def test_create_vds_by_chunks():
                 chunk.release()
             vds.channel(0).commit()
 
+
 def test_vds_3d_cube_default_axis_name():
     """tests if default axis descriptors preserve naming convention in case of 3D cubes"""
     shape = (251, 51, 126)

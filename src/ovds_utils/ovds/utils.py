@@ -1,6 +1,6 @@
 import json
 from subprocess import PIPE, Popen
-from typing import Any, AnyStr, Dict, Sequence
+from typing import Any, AnyStr, Dict, List, Sequence
 
 import openvds
 from humanfriendly import format_size
@@ -10,7 +10,7 @@ from ovds_utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-METADATATYPE2GETFUNCTION = {
+METADATATYPE_TO_OVDS_GET_FUNCTION = {
     "MetadataType.IntVector2": openvds.core.VolumeDataLayout.getMetadataIntVector2,
     "MetadataType.Float": openvds.core.VolumeDataLayout.getMetadataFloat,
     "MetadataType.DoubleVector2": openvds.core.VolumeDataLayout.getMetadataDoubleVector2,
@@ -21,7 +21,7 @@ METADATATYPE2GETFUNCTION = {
 }
 
 
-METADATATYPE2SETFUNCTION = {
+METADATATYPE_TO_OVDS_SET_FUNCTION = {
     "MetadataType.IntVector2": openvds.core.MetadataContainer.setMetadataIntVector2,
     "MetadataType.Float": openvds.core.MetadataContainer.setMetadataFloat,
     "MetadataType.DoubleVector2": openvds.core.MetadataContainer.setMetadataDoubleVector2,
@@ -82,7 +82,7 @@ def check_block_size(
 
 def copy_ovds_metadata(metadata_details: Dict[AnyStr, Any], result_metadata_container: openvds.core.MetadataContainer):
     for k, v in metadata_details.items():
-        set_method = METADATATYPE2SETFUNCTION[v.type]
+        set_method = METADATATYPE_TO_OVDS_SET_FUNCTION[v.type]
         set_method(result_metadata_container, v.category, k, v.value)
 
 
@@ -124,3 +124,45 @@ def get_vds_info(path: AnyStr, connection_string: AnyStr):
         logger.error(out)
         logger.error(err)
         raise Exception(f"Could not parse VDSInfo {e}")
+
+
+def read_metadata_container(
+    container: openvds.core.MetadataContainer,
+) -> List[Dict[str, str]]:
+    """serializes openvds.MetadataContainer to JSON entries"""
+    ret = []
+    for key in container.getMetadataKeys():
+        ovds_getter = METADATATYPE_TO_OVDS_GET_FUNCTION[str(key.type)]
+        value = ovds_getter(container, key.category, key.name)
+        if not str(key.type).startswith("MetadataType."):
+            raise RuntimeError(
+                f"{key} has {key.type} malformed, expected 'MetadataType.' prefix !"
+            )
+        # NOTE: at this time
+        # key.type should be 'MetadataType.X', we want to extract X,
+        # so that later we can create correct oVDS type
+        item_type = str(key.type).split(".")[1]
+        ret.append(
+            dict(
+                category=key.category,
+                name=key.name,
+                value=value,
+                type=item_type
+            )
+        )
+    return ret
+
+
+def create_metadata_container(
+    entries: List[Dict[str, str]] = None
+) -> openvds.core.MetadataContainer:
+    """de-serializes JSON entries to openvds.MetadataContainer"""
+    metadata_container = openvds.core.MetadataContainer()
+    entries = sorted(entries, key=lambda x: x["category"])
+    for entry in entries:
+        ovds_setter = METADATATYPE_TO_OVDS_SET_FUNCTION[f"MetadataType.{entry['type']}"]
+        ovds_setter(
+            metadata_container, entry["category"], entry["name"], entry["value"]
+        )
+
+    return metadata_container

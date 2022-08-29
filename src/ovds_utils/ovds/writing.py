@@ -3,8 +3,8 @@ from typing import Any, AnyStr, Dict, Sequence
 import numpy as np
 import openvds
 
-from .utils import check_block_size, copy_ovds_metadata
 from .enums import Dimensions
+from .utils import check_block_size, copy_ovds_metadata
 
 FORMAT2FLOAT = {
     openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
