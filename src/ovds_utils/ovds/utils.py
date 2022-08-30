@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from subprocess import PIPE, Popen
 from typing import Any, AnyStr, Dict, List, Sequence
 
@@ -86,9 +87,8 @@ def copy_ovds_metadata(metadata_details: Dict[AnyStr, Any], result_metadata_cont
         set_method(result_metadata_container, v.category, k, v.value)
 
 
-def get_vdsinfo_bin() -> str:
-    """retrives absolute path to VDSInfo based on openvds package"""
-    from pathlib import Path
+def get_ovds_bin(name: str) -> str:
+    """retrives absolute path to binary on openvds package"""
 
     import openvds as vds_package
 
@@ -102,11 +102,15 @@ def get_vdsinfo_bin() -> str:
     assert bin_directory.is_dir()
 
     # look for VDSInfo inside bin dir
-    vdsinfo_bin = bin_directory / "VDSInfo"
+    vdsinfo_bin = bin_directory / name
     assert vdsinfo_bin.exists()
     assert vdsinfo_bin.is_file()
 
     return str(vdsinfo_bin.resolve().absolute())
+
+
+def get_vdsinfo_bin() -> str:
+    return get_ovds_bin("VDSInfo")
 
 
 def get_vds_info(path: AnyStr, connection_string: AnyStr):
