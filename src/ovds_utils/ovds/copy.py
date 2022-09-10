@@ -19,7 +19,7 @@ def copy_vds(
         get_ovds_bin("VDSCopy"),
         source,
         target,
-        f"-s '{source_connection}'"
+        f"-s '{source_connection}'",
         f"-d '{target_connection}'",
     ]
     for k in additional_params:

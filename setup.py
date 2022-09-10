@@ -17,7 +17,7 @@ def get_dependencies():
 
 setup(
     name='ovds_utils',
-    version='0.1.11',
+    version='0.1.12',
     author="Michal Murawski",
     author_email="mmurawski777@gmail.com",
     description="Utilities package for Open VDS.",
