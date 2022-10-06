@@ -1,5 +1,6 @@
 from copy import deepcopy
-from typing import AnyStr, List, Sequence, Tuple, Union
+from random import sample
+from typing import Any, AnyStr, List, Sequence, Tuple, Union
 
 import numpy as np
 import openvds
@@ -7,7 +8,7 @@ import openvds
 from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
-from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, create_vds
+from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, LOD, create_vds
 from ovds_utils.ovds.utils import get_vds_info
 from ovds_utils.ovds.writing import FORMAT2FLOAT
 
@@ -82,6 +83,22 @@ class VDSChunksGenerator:
             )
         else:
             raise StopIteration
+
+
+class Axis:
+    def __init__(
+        self,
+        samples: int,
+        name: AnyStr,
+        unit: AnyStr,
+        coordinate_min: float,
+        coordinate_max: float
+    ) -> None:
+        self.samples = samples
+        self.name = name
+        self.unit = unit
+        self.coordinate_min = coordinate_min
+        self.coordinate_max = coordinate_max
 
 
 class Channel:
@@ -227,69 +244,72 @@ class VDS:
         self,
         path: AnyStr,
         connection_string: AnyStr = "",
-        shape: Sequence[int] = None,
         databrick_size: BrickSizes = BrickSizes.BrickSize_128,
         components: Components = Components.Components_1,
         metadata_dict: MetadataContainer = None,
         format: Formats = Formats.R32,
-        data: np.array = None,
-        begin: Sequence[int] = None,
-        end: Sequence[int] = None,
+        channels_data: List[np.array] = None,
         channels: List[Channel] = None,
+        axis: List[Axis] = None,
+        default_lod=LOD._0,
+        default_dimensions_nd=Dimensions.Dimensions_012,
+        default_negative_margin: int = 0,
+        default_positive_margin: int = 0
     ) -> None:
         super().__init__()
         self.path = path
         self.connection_string = connection_string
-        self.begin = begin
-        self.end = end
         self._channels = {}
-        if data is not None and shape is None:
-            shape = data.shape
+        self._axis = {}
+
         try:
             self._vds_source = openvds.open(path, connection_string)
             vds_info = get_vds_info(path, connection_string)
         except RuntimeError as e:
             if str(e) in ("Open error: File::open "):
-                if shape is None:
-                    raise VDSException("Shape was not defined during creating new VDS source.")
                 logger.debug("Creating new VDS source...")
                 self.create(
                     path=path,
                     connection_string=connection_string,
-                    shape=shape,
-                    metadata_dict=metadata_dict,
                     databrick_size=databrick_size,
-                    data=data,
-                    channels=channels,
-                    access_mode=AccessModes.Create,
                     components=components,
+                    channels=channels,
+                    axis=axis,
+                    metadata_dict=metadata_dict,
+                    channels_data=channels_data,
                     format=format,
-                    begin=begin,
-                    end=end
+                    access_mode=AccessModes.Create,
+                    dimensions_nd=default_dimensions_nd,
+                    lod=default_lod,
+                    positive_margin=default_positive_margin,
+                    negagitve_margin=default_negative_margin
                 )
                 self = self.__init__(
                     path=path,
                     connection_string=connection_string,
-                    shape=shape,
                     databrick_size=databrick_size,
                     components=components,
                     metadata_dict=metadata_dict,
                     format=format,
-                    data=data,
-                    begin=begin,
-                    end=end
                 )
                 return
             else:
                 raise VDSException(f"Open VDS resulted with: {str(e)}") from e
+
         self._layout = openvds.getLayout(self._vds_source)
         self._dimensionality = self._layout.getDimensionality()
+
         self._axis_descriptors = [
             self._layout.getAxisDescriptor(dim) for dim in range(self._dimensionality)
         ]
         self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
+
         vds_info = get_vds_info(path, connection_string)
         _info = vds_info['layoutInfo'] if 'layoutInfo' in vds_info else vds_info
+
+        for i, j in enumerate(_info['axisDescriptors']):
+            print(i, j)
+
         for i, j in enumerate(_info['channelDescriptors']):
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
@@ -338,43 +358,41 @@ class VDS:
 
     @property
     def shape(self):
-        if self.begin and self.end:
-            return (
-                self.end[2] - self.begin[2],
-                self.end[1] - self.begin[1],
-                self.end[0] - self.begin[0],
-            )
         return tuple(int(a.numSamples) for a in self._axis_descriptors[::-1])
 
     @staticmethod
     def create(
         path: AnyStr,
         connection_string: AnyStr,
-        shape: Sequence[int],
-        databrick_size=BrickSizes.BrickSize_128,
-        access_mode=AccessModes.Create,
-        components=Components.Components_1,
-        format=Formats.R32,
+        databrick_size: BrickSizes,
+        access_mode: AccessModes,
+        components: Components,
+        format: Formats,
+        channels: List[Channel],
+        axis: List[Axis],
+        dimensions_nd: Dimensions,
+        positive_margin: int,
+        negagitve_margin: int,
+        lod: LOD,
         metadata_dict: MetadataContainer = None,
-        data: np.array = None,
-        begin: Sequence[int] = None,
-        end: Sequence[int] = None,
-        channels: List[Channel] = None,
+        channels_data: List[np.array] = None,
     ):
         return create_vds(
-            path,
-            connection_string,
-            shape,
+            path=path,
+            connection_string=connection_string,
+            metadata_dict=metadata_dict,
+            channels=channels,
+            axis=axis,
             databrick_size=databrick_size.value,
-            access_mode=access_mode.value,
-            metadata_dict=metadata_dict if metadata_dict else {},
+            access_mode=access_mode,
             components=components.value,
             format=format.value,
-            channels=channels,
-            data=data,
-            close=True,
-            begin=begin,
-            end=end
+            lod=lod.value,
+            dimensions_nd=dimensions_nd.value,
+            channels_data=channels_data,
+            negative_margin=negagitve_margin,
+            positive_margin=positive_margin,
+            close=True
         )
 
     @property
