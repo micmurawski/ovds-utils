@@ -55,7 +55,7 @@ def get_element_size(format: openvds.core.VolumeDataFormat, components: openvds.
     ):
         return 8 * components.value
     else:
-        raise Exception("Illegal format")
+        raise Exception("Illegal format: ", format)
 
 
 def check_block_size(
