@@ -1,5 +1,6 @@
 from copy import deepcopy
-from typing import AnyStr, List, Sequence, Tuple, Union
+from random import sample
+from typing import Any, AnyStr, List, Sequence, Tuple, Union
 
 import numpy as np
 import openvds

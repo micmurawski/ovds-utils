@@ -120,6 +120,24 @@ def create_vds(
         brick_size_2d_multiplier=brick_size_2d_multiplier,
         full_resolution_dimension=full_resolution_dimension,
     )
+
+    (
+        layout_descriptor,
+        axis_descriptors,
+        channel_descriptors,
+        metadata_container
+    ) = create_vds_attributes(
+        databrick_size=databrick_size,
+        metadata_dict=metadata_dict,
+        channles=channels,
+        axis=axis,
+        lod_levels=lod,
+        negative_margin=negative_margin,
+        positive_margin=positive_margin,
+        options=options,
+        brick_size_2d_multiplier=brick_size_2d_multiplier,
+        full_resolution_dimension=full_resolution_dimension,
+    )
     vds = openvds.create(
         url=path,
         connectionString=connection_string,
