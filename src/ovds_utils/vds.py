@@ -8,7 +8,7 @@ import openvds
 from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
-from ovds_utils.ovds import AccessModes, BrickSizes, Components, Dimensions, Formats, LOD, create_vds
+from ovds_utils.ovds import LOD, AccessModes, BrickSizes, Components, Dimensions, Formats, Options, create_vds
 from ovds_utils.ovds.utils import get_vds_info
 from ovds_utils.ovds.writing import FORMAT2FLOAT
 
@@ -114,8 +114,6 @@ class Channel:
             chunks_count: int = None,
             vds_source=None,
             shape: Sequence[int] = None,
-            begin: Sequence[int] = None,
-            end: Sequence[int] = None
     ) -> None:
         self._vds_source = vds_source
         self.name = name
@@ -123,8 +121,6 @@ class Channel:
         self.unit = unit
         self.accessor = accessor
         self.chunks_count = chunks_count
-        self.begin = begin
-        self.end = end
         self.shape = shape
         self.components = components
         self.value_range_min = value_range_min
@@ -198,6 +194,7 @@ class Channel:
                     end.append(k+1)
         else:
             raise VDSException("Item key is not list of slices or int")
+
         if is_int:
             return self._read_data(self._vds_source, begin, end).__getitem__(
                 tuple(
@@ -207,33 +204,8 @@ class Channel:
         else:
             return self._read_data(self._vds_source, begin, end)
 
-    def _getitem_for_subset_dataset(self, key: Sequence[Union[int, slice]]) -> np.array:
-        # TODO: Add range checks
-        new_key = []
-        if all([isinstance(i, int) for i in key]):
-            new_key = [k+self.begin[i] for i, k in enumerate(key)]
-        elif all([isinstance(i, int) or isinstance(i, slice) for i in key]):
-            for i, k in enumerate(key):
-                if isinstance(k, slice):
-                    new_key.append(
-                        slice(
-                            self.begin[i] + k.start if k.start else self.begin[i],
-                            self.begin[i] + k.stop if k.stop else self.end[i],
-                            None
-                        )
-                    )
-                elif isinstance(k, int):
-                    new_key.append(k+self.begin[i])
-        else:
-            raise VDSException("Item key is not list of slices or int")
-
-        return self._getitem_for_whole_dataset(tuple(new_key))
-
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
-        if self.begin and self.end:
-            return self._getitem_for_subset_dataset(key)
-        else:
-            return self._getitem_for_whole_dataset(key)
+        return self._getitem_for_whole_dataset(key)
 
     def commit(self):
         self.accessor.commit()
@@ -241,20 +213,23 @@ class Channel:
 
 class VDS:
     def __init__(
-        self,
-        path: AnyStr,
-        connection_string: AnyStr = "",
-        databrick_size: BrickSizes = BrickSizes.BrickSize_128,
-        components: Components = Components.Components_1,
-        metadata_dict: MetadataContainer = None,
-        format: Formats = Formats.R32,
-        channels_data: List[np.array] = None,
-        channels: List[Channel] = None,
-        axis: List[Axis] = None,
-        default_lod=LOD._0,
-        default_dimensions_nd=Dimensions.Dimensions_012,
-        default_negative_margin: int = 0,
-        default_positive_margin: int = 0
+            self,
+            path: AnyStr,
+            connection_string: AnyStr = "",
+            databrick_size: BrickSizes = BrickSizes.BrickSize_128,
+            components: Components = Components.Components_1,
+            metadata_dict: MetadataContainer = {},
+            format: Formats = Formats.R32,
+            channels_data: List[np.array] = None,
+            channels: List[Channel] = None,
+            axis: List[Axis] = None,
+            lod=LOD._0,
+            dimensions_nd=Dimensions.Dimensions_012,
+            negative_margin: int = 0,
+            positive_margin: int = 0,
+            options: Options = Options._0,
+            full_resolution_dimension: int = 0,
+            brick_size_2d_multiplier: int = 4,
     ) -> None:
         super().__init__()
         self.path = path
@@ -268,6 +243,7 @@ class VDS:
         except RuntimeError as e:
             if str(e) in ("Open error: File::open "):
                 logger.debug("Creating new VDS source...")
+                print("create")
                 self.create(
                     path=path,
                     connection_string=connection_string,
@@ -279,10 +255,13 @@ class VDS:
                     channels_data=channels_data,
                     format=format,
                     access_mode=AccessModes.Create,
-                    dimensions_nd=default_dimensions_nd,
-                    lod=default_lod,
-                    positive_margin=default_positive_margin,
-                    negagitve_margin=default_negative_margin
+                    dimensions_nd=dimensions_nd,
+                    lod=lod,
+                    positive_margin=positive_margin,
+                    negagitve_margin=negative_margin,
+                    options=options,
+                    full_resolution_dimension=full_resolution_dimension,
+                    brick_size_2d_multiplier=brick_size_2d_multiplier
                 )
                 self = self.__init__(
                     path=path,
@@ -308,13 +287,17 @@ class VDS:
         _info = vds_info['layoutInfo'] if 'layoutInfo' in vds_info else vds_info
 
         for i, j in enumerate(_info['axisDescriptors']):
-            print(i, j)
+            self._axis[j['name']] = Axis(
+                samples=j['numSamples'],
+                name=j['name'],
+                unit=j['unit'],
+                coordinate_max=j['coordinateMax'],
+                coordinate_min=j['coordinateMin']
+            )
 
         for i, j in enumerate(_info['channelDescriptors']):
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
-                begin=self.begin,
-                end=self.end,
                 shape=self.shape,
                 components=getattr(Components, j['components']),
                 name=j['name'],
@@ -373,7 +356,10 @@ class VDS:
         dimensions_nd: Dimensions,
         positive_margin: int,
         negagitve_margin: int,
+        full_resolution_dimension: int,
+        brick_size_2d_multiplier: int,
         lod: LOD,
+        options: Options,
         metadata_dict: MetadataContainer = None,
         channels_data: List[np.array] = None,
     ):
@@ -384,7 +370,7 @@ class VDS:
             channels=channels,
             axis=axis,
             databrick_size=databrick_size.value,
-            access_mode=access_mode,
+            access_mode=access_mode.value,
             components=components.value,
             format=format.value,
             lod=lod.value,
@@ -392,6 +378,9 @@ class VDS:
             channels_data=channels_data,
             negative_margin=negagitve_margin,
             positive_margin=positive_margin,
+            options=options.value,
+            brick_size_2d_multiplier=brick_size_2d_multiplier,
+            full_resolution_dimension=full_resolution_dimension,
             close=True
         )
 

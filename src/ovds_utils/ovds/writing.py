@@ -1,4 +1,4 @@
-from typing import Any, AnyStr, Dict, List, Tuple
+from typing import Any, AnyStr, Dict, List
 
 import numpy as np
 import openvds
@@ -40,7 +40,7 @@ def create_vds_attributes(
     full_resolution_dimension: int,
     channles,
     axis
-) -> Tuple[openvds.VolumeDataLayoutDescriptor, List[openvds.VolumeDataAxisDescriptor], List[openvds.VolumeDataChannelDescriptor], openvds.MetadataContainer]:
+):
     layout_descriptor = openvds.VolumeDataLayoutDescriptor(
         brickSize=databrick_size,
         lodLevels=lod_levels,
@@ -53,14 +53,14 @@ def create_vds_attributes(
     metadata_container = openvds.MetadataContainer()
     copy_ovds_metadata(metadata_dict, metadata_container)
     axis_descriptors = []
-    for a in axis:
+    for a in axis[::-1]:
         axis_descriptors.append(
             openvds.VolumeDataAxisDescriptor(
-                numSamples=a.samples,
-                name=a.name,
-                unit=a.unit,
-                coordinateMin=a.coordinate_min,
-                coordinateMax=a.coordinate_max
+                a.samples,
+                a.name,
+                a.unit,
+                a.coordinate_min,
+                a.coordinate_max
             )
         )
 
@@ -121,20 +121,36 @@ def create_vds(
         full_resolution_dimension=full_resolution_dimension,
     )
 
-    vds = openvds.create(
-        path,
-        connection_string,
+    (
         layout_descriptor,
         axis_descriptors,
         channel_descriptors,
-        metadata_container,
+        metadata_container
+    ) = create_vds_attributes(
+        databrick_size=databrick_size,
+        metadata_dict=metadata_dict,
+        channles=channels,
+        axis=axis,
+        lod_levels=lod,
+        negative_margin=negative_margin,
+        positive_margin=positive_margin,
+        options=options,
+        brick_size_2d_multiplier=brick_size_2d_multiplier,
+        full_resolution_dimension=full_resolution_dimension,
+    )
+    vds = openvds.create(
+        url=path,
+        connectionString=connection_string,
+        layoutDescriptor=layout_descriptor,
+        axisDescriptors=axis_descriptors,
+        channelDescriptors=channel_descriptors,
+        metadata=metadata_container,
     )
     access_manager = openvds.getAccessManager(vds)
-
     if channels_data:
         for i, data in enumerate(channels_data):
             accessor = access_manager.createVolumeDataPageAccessor(
-                dimensionsND=dimensions_nd.value,
+                dimensionsND=dimensions_nd,
                 accessMode=access_mode,
                 lod=lod,
                 channel=i,
