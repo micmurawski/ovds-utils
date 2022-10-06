@@ -39,6 +39,11 @@ class Dimensions(Enum):
     Dimensions_012 = openvds.DimensionsND.Dimensions_012
 
 
+class Options(Enum):
+    _0 = openvds.VolumeDataLayoutDescriptor.Options.Options_None
+    _2DLODs = openvds.VolumeDataLayoutDescriptor.Options.Options_Create2DLODs
+
+
 class LOD(Enum):
     _0 = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_None
     _1 = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_1
