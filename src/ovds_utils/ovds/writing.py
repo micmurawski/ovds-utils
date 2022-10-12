@@ -124,7 +124,7 @@ def create_vds(
         databrick_size=databrick_size,
         metadata_dict=metadata_dict,
         channles=channels,
-        axis=axis,
+        axes=axes,
         lod_levels=lod,
         negative_margin=negative_margin,
         positive_margin=positive_margin,

@@ -1,6 +1,5 @@
 from copy import deepcopy
-from random import sample
-from typing import Any, AnyStr, List, Sequence, Tuple, Union
+from typing import AnyStr, List, Sequence, Tuple, Union
 
 import numpy as np
 import openvds
@@ -90,15 +89,18 @@ class Axis:
         self,
         samples: int,
         name: AnyStr,
-        unit: AnyStr,
         coordinate_min: float,
-        coordinate_max: float
+        coordinate_max: float,
+        unit: AnyStr = "unitless",
     ) -> None:
         self.samples = samples
         self.name = name
         self.unit = unit
         self.coordinate_min = coordinate_min
         self.coordinate_max = coordinate_max
+
+    def __repr__(self) -> str:
+        return f"<Axis(name={self.name}, unit={self.unit}, range=({self.coordinate_min}, {self.coordinate_max}))>"
 
 
 class Channel:
