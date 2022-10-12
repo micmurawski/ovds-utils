@@ -7,7 +7,8 @@ import openvds
 from ovds_utils.exceptions import VDSException
 from ovds_utils.logging import get_logger
 from ovds_utils.metadata import MetadataContainer
-from ovds_utils.ovds import LOD, AccessModes, BrickSizes, Components, Dimensions, Formats, Options, create_vds
+from ovds_utils.ovds import (LOD, AccessModes, BrickSizes, Components, Dimensions, Formats, InitValue, Options,
+                             create_vds)
 from ovds_utils.ovds.utils import get_vds_info
 from ovds_utils.ovds.writing import FORMAT2FLOAT
 
@@ -217,20 +218,21 @@ class Channel:
 
 class VDS:
     def __init__(
-            self,
-            path: AnyStr,
-            connection_string: AnyStr = "",
-            databrick_size: BrickSizes = BrickSizes._128,
-            metadata_dict: MetadataContainer = {},
-            channels_data: List[np.array] = None,
-            channels: List[Channel] = None,
-            axes: List[Axis] = None,
-            lod=LOD._None,
-            negative_margin: int = 0,
-            positive_margin: int = 0,
-            options: Options = Options._None,
-            full_resolution_dimension: int = 0,
-            brick_size_2d_multiplier: int = 4,
+        self,
+        path: AnyStr,
+        connection_string: AnyStr = "",
+        databrick_size: BrickSizes = BrickSizes._128,
+        metadata_dict: MetadataContainer = {},
+        channels_data: List[np.array] = None,
+        channels: List[Channel] = None,
+        axes: List[Axis] = None,
+        lod=LOD._None,
+        negative_margin: int = 0,
+        positive_margin: int = 0,
+        options: Options = Options._None,
+        full_resolution_dimension: int = 0,
+        brick_size_2d_multiplier: int = 4,
+        init_value=InitValue.zero
     ) -> None:
         super().__init__()
         self.path = path
@@ -258,7 +260,8 @@ class VDS:
                     negagitve_margin=negative_margin,
                     options=options,
                     full_resolution_dimension=full_resolution_dimension,
-                    brick_size_2d_multiplier=brick_size_2d_multiplier
+                    brick_size_2d_multiplier=brick_size_2d_multiplier,
+                    init_value=init_value
                 )
                 self = self.__init__(
                     path=path,
@@ -388,6 +391,7 @@ class VDS:
         brick_size_2d_multiplier: int,
         lod: LOD,
         options: Options,
+        init_value: InitValue,
         metadata_dict: MetadataContainer = None,
         channels_data: List[np.array] = None,
     ):
@@ -406,6 +410,7 @@ class VDS:
             options=options.value,
             brick_size_2d_multiplier=brick_size_2d_multiplier,
             full_resolution_dimension=full_resolution_dimension,
+            init_value=init_value,
             close=True
         )
 

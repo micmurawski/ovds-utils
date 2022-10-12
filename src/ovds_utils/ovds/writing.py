@@ -3,6 +3,7 @@ from typing import Any, AnyStr, Dict, List
 import numpy as np
 import openvds
 
+from .enums import InitValue
 from .utils import copy_ovds_metadata
 
 FORMAT2FLOAT = {
@@ -37,9 +38,28 @@ def write_nan_pages(
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
-        buf[:, :, :] = np.full(buf.shape, np.nan)
+        buf[:, :, :] = np.full(buf.shape, np.nan, dtype=dtype)
         page.release()
     accessor.commit()
+
+
+def write_zero_pages(
+    accessor: openvds.core.VolumeDataPageAccessor,
+    format: openvds.VolumeDataChannelDescriptor.Format
+):
+    dtype = FORMAT2FLOAT[format]
+    for c in range(accessor.getChunkCount()):
+        page = accessor.createPage(c)
+        buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
+        buf[:, :, :] = np.zeros(buf.shape, dtype=dtype)
+        page.release()
+    accessor.commit()
+
+
+INITVALUE = {
+    InitValue.NaN: write_nan_pages,
+    InitValue.zero: write_zero_pages
+}
 
 
 def create_vds_attributes(
@@ -108,6 +128,7 @@ def create_vds(
     full_resolution_dimension: int,
     default_max_pages: int = 8,
     channels_data=None,
+    init_value: InitValue = InitValue.zero,
     close=True
 ):
     (
@@ -175,7 +196,7 @@ def create_vds(
                 channel=i,
                 maxPages=default_max_pages,
             )
-            write_nan_pages(accessor, channel.format.value)
+            INITVALUE[init_value](accessor, channel.format.value)
 
     if close:
         openvds.close(vds)

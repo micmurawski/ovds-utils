@@ -1,6 +1,11 @@
-from enum import Enum
+from enum import Enum, auto
 
 import openvds
+
+
+class InitValue(Enum):
+    NaN = auto()
+    zero = auto()
 
 
 class Formats(Enum):
