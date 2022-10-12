@@ -14,19 +14,19 @@ class Formats(Enum):
 
 
 class Components(Enum):
-    Components_1 = openvds.VolumeDataChannelDescriptor.Components.Components_1
-    Components_2 = openvds.VolumeDataChannelDescriptor.Components.Components_2
-    Components_4 = openvds.VolumeDataChannelDescriptor.Components.Components_4
+    _1 = openvds.VolumeDataChannelDescriptor.Components.Components_1
+    _2 = openvds.VolumeDataChannelDescriptor.Components.Components_2
+    _4 = openvds.VolumeDataChannelDescriptor.Components.Components_4
 
 
 class BrickSizes(Enum):
-    BrickSize_64 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_64
-    BrickSize_128 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_128
-    BrickSize_256 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_256
-    BrickSize_512 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_512
-    BrickSize_1024 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_1024
-    BrickSize_2048 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_2048
-    BrickSize_4096 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_4096
+    _64 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_64
+    _128 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_128
+    _256 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_256
+    _512 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_512
+    _1024 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_1024
+    _2048 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_2048
+    _4096 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_4096
 
 
 class AccessModes(Enum):
@@ -36,16 +36,16 @@ class AccessModes(Enum):
 
 
 class Dimensions(Enum):
-    Dimensions_012 = openvds.DimensionsND.Dimensions_012
+    _012 = openvds.DimensionsND.Dimensions_012
 
 
 class Options(Enum):
-    _0 = openvds.VolumeDataLayoutDescriptor.Options.Options_None
+    _None = openvds.VolumeDataLayoutDescriptor.Options.Options_None
     _2DLODs = openvds.VolumeDataLayoutDescriptor.Options.Options_Create2DLODs
 
 
 class LOD(Enum):
-    _0 = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_None
+    _None = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_None
     _1 = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_1
     _2 = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_2
     _3 = openvds.VolumeDataLayoutDescriptor.LODLevels.LODLevels_3

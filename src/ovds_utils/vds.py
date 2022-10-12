@@ -113,6 +113,7 @@ class Channel:
             chunks_count: int = None,
             vds_source=None,
             shape: Sequence[int] = None,
+            dimensions_nd=Dimensions._012,
     ) -> None:
         self._vds_source = vds_source
         self.name = name
@@ -124,6 +125,7 @@ class Channel:
         self.components = components
         self.value_range_min = value_range_min
         self.value_range_max = value_range_max
+        self.dimensions_nd = dimensions_nd
 
     def __repr__(self) -> str:
         return f"<Channel(name={self.name}, unit={self.unit}, format={self.format.name})>"
@@ -215,18 +217,15 @@ class VDS:
             self,
             path: AnyStr,
             connection_string: AnyStr = "",
-            databrick_size: BrickSizes = BrickSizes.BrickSize_128,
-            components: Components = Components.Components_1,
+            databrick_size: BrickSizes = BrickSizes._128,
             metadata_dict: MetadataContainer = {},
-            format: Formats = Formats.R32,
             channels_data: List[np.array] = None,
             channels: List[Channel] = None,
-            axis: List[Axis] = None,
-            lod=LOD._0,
-            dimensions_nd=Dimensions.Dimensions_012,
+            axes: List[Axis] = None,
+            lod=LOD._None,
             negative_margin: int = 0,
             positive_margin: int = 0,
-            options: Options = Options._0,
+            options: Options = Options._None,
             full_resolution_dimension: int = 0,
             brick_size_2d_multiplier: int = 4,
     ) -> None:
@@ -234,7 +233,7 @@ class VDS:
         self.path = path
         self.connection_string = connection_string
         self._channels = {}
-        self._axis = {}
+        self._axes = {}
 
         try:
             self._vds_source = openvds.open(path, connection_string)
@@ -242,19 +241,15 @@ class VDS:
         except RuntimeError as e:
             if str(e) in ("Open error: File::open "):
                 logger.debug("Creating new VDS source...")
-                print("create")
                 self.create(
                     path=path,
                     connection_string=connection_string,
                     databrick_size=databrick_size,
-                    components=components,
                     channels=channels,
-                    axis=axis,
+                    axes=axes,
                     metadata_dict=metadata_dict,
                     channels_data=channels_data,
-                    format=format,
                     access_mode=AccessModes.Create,
-                    dimensions_nd=dimensions_nd,
                     lod=lod,
                     positive_margin=positive_margin,
                     negagitve_margin=negative_margin,
@@ -266,9 +261,7 @@ class VDS:
                     path=path,
                     connection_string=connection_string,
                     databrick_size=databrick_size,
-                    components=components,
                     metadata_dict=metadata_dict,
-                    format=format,
                 )
                 return
             else:
@@ -277,28 +270,23 @@ class VDS:
         self._layout = openvds.getLayout(self._vds_source)
         self._dimensionality = self._layout.getDimensionality()
 
-        self._axis_descriptors = [
-            self._layout.getAxisDescriptor(dim) for dim in range(self._dimensionality)
-        ]
-        self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
-
         vds_info = get_vds_info(path, connection_string)
         _info = vds_info['layoutInfo'] if 'layoutInfo' in vds_info else vds_info
 
         for i, j in enumerate(_info['axisDescriptors']):
-            self._axis[j['name']] = Axis(
+            self._axes[j['name']] = Axis(
                 samples=j['numSamples'],
                 name=j['name'],
                 unit=j['unit'],
                 coordinate_max=j['coordinateMax'],
                 coordinate_min=j['coordinateMin']
             )
-
+        self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
         for i, j in enumerate(_info['channelDescriptors']):
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
                 shape=self.shape,
-                components=getattr(Components, j['components']),
+                components=getattr(Components, j['components'].replace("Components", "")),
                 name=j['name'],
                 unit=j['unit'],
                 format=getattr(
@@ -311,7 +299,15 @@ class VDS:
             )
 
     def channel(self, number: int) -> Channel:
-        return list(self._channels.values())[number]
+        return self.channels[number]
+
+    @property
+    def channels(self) -> List[Channel]:
+        return list(self._channels.values())
+
+    @property
+    def axes(self) -> List[Axis]:
+        return list(self._axes.values())[::-1]
 
     def get_channel(self, name: AnyStr) -> Channel:
         return self._channels[name]
@@ -329,30 +325,60 @@ class VDS:
     def metadata(self) -> MetadataContainer:
         return MetadataContainer.get_from_layout(self._layout)
 
+    @property
+    def negative_margin(self) -> int:
+        return self._layout.getLayoutDescriptor().getNegativeMargin()
+
+    @property
+    def positive_margin(self) -> int:
+        return self._layout.getLayoutDescriptor().getPositiveMargin()
+
+    @property
+    def full_resolution_dimension(self) -> int:
+        return self._layout.getLayoutDescriptor().fullResolutionDimension
+
+    @property
+    def options(self):
+        name = str(self._layout.getLayoutDescriptor().getOptions()).replace("Options.Options", "")
+        return getattr(Options, name)
+
+    @property
+    def brick_size_2d_multiplier(self) -> int:
+        return self._layout.getLayoutDescriptor().brickSizeMultiplier2D
+
+    @property
+    def databrick_size(self) -> BrickSizes:
+        name = str(self._layout.getLayoutDescriptor().getBrickSize()).replace("BrickSize.BrickSize", "")
+        return getattr(BrickSizes, name)
+
+    @property
+    def lod(self) -> LOD:
+        name = str(self._layout.getLayoutDescriptor().getLODLevels()).replace("LODLevels.LODLevels", "")
+        return getattr(LOD, name)
+
     def __str__(self) -> str:
         return f"<{self.__class__.__qualname__}(path={self.path})>"
 
-    @property
+    @ property
     def axis_descriptors(self):
-        return tuple(
-            (a.name, a.unit, a.numSamples) for a in self._axis_descriptors[::-1]
-        )
+        return tuple((
+            self._axes[k].name,
+            self._axes[k].unit,
+            self._axes[k].samples
+        ) for k in self._axes)[::-1]
 
-    @property
+    @ property
     def shape(self):
-        return tuple(int(a.numSamples) for a in self._axis_descriptors[::-1])
+        return tuple(self._axes[k].samples for k in self._axes)[::-1]
 
-    @staticmethod
+    @ staticmethod
     def create(
         path: AnyStr,
         connection_string: AnyStr,
         databrick_size: BrickSizes,
         access_mode: AccessModes,
-        components: Components,
-        format: Formats,
         channels: List[Channel],
-        axis: List[Axis],
-        dimensions_nd: Dimensions,
+        axes: List[Axis],
         positive_margin: int,
         negagitve_margin: int,
         full_resolution_dimension: int,
@@ -367,13 +393,10 @@ class VDS:
             connection_string=connection_string,
             metadata_dict=metadata_dict,
             channels=channels,
-            axis=axis,
+            axes=axes,
             databrick_size=databrick_size.value,
             access_mode=access_mode.value,
-            components=components.value,
-            format=format.value,
             lod=lod.value,
-            dimensions_nd=dimensions_nd.value,
             channels_data=channels_data,
             negative_margin=negagitve_margin,
             positive_margin=positive_margin,
@@ -396,7 +419,7 @@ class VDS:
             channel: int = 0,
             maxPages: int = 8,
             chunkMetadataPageSize: int = 1024,
-            dimensionsND=Dimensions.Dimensions_012,
+            dimensionsND=Dimensions._012,
     ):
         access_manager = openvds.getAccessManager(self._vds_source)
         accessor = access_manager.createVolumeDataPageAccessor(

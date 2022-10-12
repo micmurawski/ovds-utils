@@ -12,7 +12,7 @@ def test_vds_shape():
     shape = (251, 51, 126)
     data = np.random.rand(*shape).astype(np.float32)
     names = ["Sample", "Crossline", "Inline"]
-    axis = [
+    axes = [
         Axis(
             samples=s,
             name=names[i],
@@ -33,14 +33,14 @@ def test_vds_shape():
                     unit="unitless",
                     value_range_min=0.0,
                     value_range_max=1.0,
-                    components=Components.Components_1
+                    components=Components._1
                 )
             ],
-            axis=axis,
+            axes=axes,
             channels_data=[
                 data
             ],
-            databrick_size=BrickSizes.BrickSize_128
+            databrick_size=BrickSizes._128
         )
 
         assert vds[:, :, :].shape == vds.shape == shape
@@ -60,7 +60,7 @@ def test_create_vds_by_chunks():
     }
     data = np.random.rand(*shape).astype(dtype)
     names = ["Sample", "Crossline", "Inline"]
-    axis = [
+    axes = [
         Axis(
             samples=s,
             name=names[i],
@@ -71,27 +71,33 @@ def test_create_vds_by_chunks():
         for i, s in enumerate(shape)
     ]
     with TemporaryDirectory() as dir:
-        with TemporaryDirectory() as dir:
-            vds = VDS(
-                os.path.join(dir, "example.vds"),
-                metadata_dict=metadata,
-                axis=axis,
-                databrick_size=BrickSizes.BrickSize_64,
-                channels=[
-                    Channel(
-                        name="Channel0",
-                        format=Formats.R64,
-                        unit="unitless",
-                        value_range_min=0.0,
-                        value_range_max=1000.0,
-                        components=Components.Components_1
-                    )
-                ]
+        vds = VDS(
+            os.path.join(dir, "example.vds"),
+            metadata_dict=metadata,
+            axes=axes,
+            databrick_size=BrickSizes._64,
+            channels=[
+                Channel(
+                    name="Channel0",
+                    format=Formats.R64,
+                    unit="unitless",
+                    value_range_min=0.0,
+                    value_range_max=1000.0,
+                    components=Components._1
+                )
+            ]
+        )
+        for chunk in vds.channel(0).chunks():
+            chunk[:, :, :] = data[chunk.slices]
+            chunk.release()
+        vds.channel(0).commit()
+
+        assert vds[:, :, :].shape == vds.shape == shape
+        for _ in range(shape[0]):
+            assert all(
+                np.array_equal(data[i, 0, :], vds[i, 0, :])
+                for i in range(shape[0])
             )
-            for chunk in vds.channel(0).chunks():
-                chunk[:, :, :] = data[chunk.slices]
-                chunk.release()
-            vds.channel(0).commit()
 
 
 def test_vds_3d_cube_default_axis_name():
@@ -99,7 +105,7 @@ def test_vds_3d_cube_default_axis_name():
     shape = (251, 51, 126)
     data = np.random.rand(*shape).astype(np.float32)
     names = ["Sample", "Crossline", "Inline"]
-    axis = [
+    axes = [
         Axis(
             samples=s,
             name=names[i],
@@ -113,7 +119,7 @@ def test_vds_3d_cube_default_axis_name():
         vds = VDS(
             os.path.join(dir, "example.vds"),
             "",
-            axis=axis,
+            axes=axes,
             channels_data=[
                 data
             ],
@@ -124,10 +130,10 @@ def test_vds_3d_cube_default_axis_name():
                     unit="unitless",
                     value_range_min=0.0,
                     value_range_max=1.0,
-                    components=Components.Components_1
+                    components=Components._1
                 )
             ],
-            databrick_size=BrickSizes.BrickSize_128
+            databrick_size=BrickSizes._128
         )
         vds.axis_descriptors[0] == ("Sample", "unitless", 126)
         vds.axis_descriptors[1] == ("Crossline", "unitless", 51)
