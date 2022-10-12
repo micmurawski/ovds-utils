@@ -29,6 +29,19 @@ def write_pages(
     accessor.commit()
 
 
+def write_nan_pages(
+    accessor: openvds.core.VolumeDataPageAccessor,
+    format: openvds.VolumeDataChannelDescriptor.Format
+):
+    dtype = FORMAT2FLOAT[format]
+    for c in range(accessor.getChunkCount()):
+        page = accessor.createPage(c)
+        buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
+        buf[:, :, :] = np.full(buf.shape, np.nan)
+        page.release()
+    accessor.commit()
+
+
 def create_vds_attributes(
     databrick_size: openvds.core.VolumeDataLayoutDescriptor.BrickSize,
     metadata_dict: Dict[AnyStr, Any],
@@ -152,6 +165,17 @@ def create_vds(
                 maxPages=default_max_pages,
             )
             write_pages(accessor, data, channel.format.value)
+    else:
+        for i in range(len(channels)):
+            channel = channels[i]
+            accessor = access_manager.createVolumeDataPageAccessor(
+                dimensionsND=channel.dimensions_nd.value,
+                accessMode=access_mode,
+                lod=lod,
+                channel=i,
+                maxPages=default_max_pages,
+            )
+            write_nan_pages(accessor, channel.format.value)
 
     if close:
         openvds.close(vds)
