@@ -226,13 +226,13 @@ class VDS:
         channels_data: List[np.array] = None,
         channels: List[Channel] = None,
         axes: List[Axis] = None,
-        lod=LOD._None,
+        lod: LOD = LOD._None,
         negative_margin: int = 0,
         positive_margin: int = 0,
         options: Options = Options._None,
         full_resolution_dimension: int = 0,
         brick_size_2d_multiplier: int = 4,
-        init_value=InitValue.zero
+        init_value: InitValue = InitValue.zero
     ) -> None:
         super().__init__()
         self.path = path
