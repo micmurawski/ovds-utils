@@ -51,7 +51,7 @@ install_dependencies: export PIP_PROCESS_DEPENDENCY_LINKS=1
 install_dependencies: $(PYTHON_VENV)
 	$(call in_venv,$(PIP) install --upgrade 'pip')
 ifneq ($(wildcard ./setup.py),)
-	$(call in_venv,$(PIP) install --editable .)
+	$(call in_venv,$(PIP) install --upgrade --upgrade-strategy eager --editable .)
 endif
 
 $(PYTHON_VENV):
