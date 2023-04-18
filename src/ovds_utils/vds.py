@@ -10,7 +10,7 @@ from ovds_utils.metadata import MetadataContainer
 from ovds_utils.ovds import (LOD, AccessModes, BrickSizes, Components, Dimensions, Formats, InitValue, Options,
                              create_vds)
 from ovds_utils.ovds.utils import get_vds_info
-from ovds_utils.ovds.writing import FORMAT2FLOAT
+from ovds_utils.ovds.writing import FORMAT2NPTYPE
 
 logger = get_logger(__name__)
 
@@ -34,12 +34,12 @@ class VDSChunk:
         return f"<VDSChunk(number={self.number})>"
 
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
-        dtype = FORMAT2FLOAT[self.format.value]
+        dtype = FORMAT2NPTYPE[self.format.value]
         buf = np.array(self.page.getWritableBuffer(), copy=False, dtype=dtype)
         return buf.__getitem__(key)
 
     def __setitem__(self, key: Sequence[Union[int, slice]], value: np.array):
-        dtype = FORMAT2FLOAT[self.format.value]
+        dtype = FORMAT2NPTYPE[self.format.value]
         buf = np.array(self.page.getWritableBuffer(), copy=False, dtype=dtype)
         return buf.__setitem__(key, value)
 

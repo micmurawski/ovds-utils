@@ -6,9 +6,13 @@ import openvds
 from .enums import InitValue
 from .utils import copy_ovds_metadata
 
-FORMAT2FLOAT = {
+FORMAT2NPTYPE = {
     openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
-    openvds.VolumeDataChannelDescriptor.Format.Format_R32: np.float32
+    openvds.VolumeDataChannelDescriptor.Format.Format_R32: np.float32,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U8: np.uint8,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U16: np.uint16,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U32: np.uint32,
+    openvds.VolumeDataChannelDescriptor.Format.Format_U64: np.uint64
 }
 
 
@@ -16,7 +20,7 @@ def write_pages(
     accessor: openvds.core.VolumeDataPageAccessor, data: np.array,
     format: openvds.VolumeDataChannelDescriptor.Format
 ):
-    dtype = FORMAT2FLOAT[format]
+    dtype = FORMAT2NPTYPE[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
@@ -34,7 +38,7 @@ def write_nan_pages(
     accessor: openvds.core.VolumeDataPageAccessor,
     format: openvds.VolumeDataChannelDescriptor.Format
 ):
-    dtype = FORMAT2FLOAT[format]
+    dtype = FORMAT2NPTYPE[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
@@ -47,7 +51,7 @@ def write_zero_pages(
     accessor: openvds.core.VolumeDataPageAccessor,
     format: openvds.VolumeDataChannelDescriptor.Format
 ):
-    dtype = FORMAT2FLOAT[format]
+    dtype = FORMAT2NPTYPE[format]
     for c in range(accessor.getChunkCount()):
         page = accessor.createPage(c)
         buf = np.array(page.getWritableBuffer(), copy=False, dtype=dtype)
