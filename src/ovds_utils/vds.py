@@ -20,14 +20,13 @@ class VDSChunk:
         self,
         number: int,
         accessor: openvds.core.VolumeDataPageAccessor,
-        page: openvds.core.VolumeDataPage,
         format: Formats
     ) -> None:
         super().__init__()
         self.is_released = False
         self.number = number
         self.accesor = accessor
-        self.page = page
+        self._page = None
         self.format = format
 
     def __repr__(self) -> str:
@@ -35,7 +34,8 @@ class VDSChunk:
 
     def __getitem__(self, key: Sequence[Union[int, slice]]) -> np.array:
         dtype = FORMAT2NPTYPE[self.format.value]
-        buf = np.array(self.page.getWritableBuffer(), copy=False, dtype=dtype)
+        page = self.accesor.readPage(self.number)
+        buf = np.array(page.getBuffer(), copy=False, dtype=dtype)
         return buf.__getitem__(key)
 
     def __setitem__(self, key: Sequence[Union[int, slice]], value: np.array):
@@ -46,6 +46,18 @@ class VDSChunk:
     def release(self) -> None:
         self.page.release()
         self.is_released = True
+
+    @property
+    def page(self):
+        if self._page is None:
+            try:
+                self._page = self.accesor.createPage(self.number)
+            except openvds.core.InvalidOperation as e:
+                if e.args[0] == "Cannot create a page that already exists":
+                    self._page = self.accesor.readPage(self.number)
+                else:
+                    raise e
+        return self._page
 
     @property
     def minmax(self) -> Tuple[Sequence[int]]:
@@ -75,12 +87,12 @@ class VDSChunksGenerator:
         return self
 
     def __next__(self):
-        if self.n <= self.chunks_count:
-            page = self.accessor.createPage(self.n)
-            self.n += 1
-            return VDSChunk(
-                number=self.n, accessor=self.accessor, page=page, format=self.format
+        if self.n < self.chunks_count:
+            chunk = VDSChunk(
+                number=self.n, accessor=self.accessor, format=self.format
             )
+            self.n += 1
+            return chunk
         else:
             raise StopIteration
 
@@ -140,9 +152,8 @@ class Channel:
     def get_chunk(self, number: int) -> VDSChunk:
         if number not in set(range(self.chunks_count)):
             raise VDSException(f"Chunk number is out of range of: 0 to {self.chunks_count-1}")
-        page = self.accessor.createPage(number)
         return VDSChunk(
-            number=number, accessor=self.accessor, page=page, format=self.format
+            number=number, accessor=self.accessor, format=self.format
         )
 
     def _read_data(
