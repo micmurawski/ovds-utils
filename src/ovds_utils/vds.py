@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import AnyStr, List, Sequence, Tuple, Union
+from enum import Enum
 
 import numpy as np
 import openvds
@@ -227,6 +228,12 @@ class Channel:
         self.accessor.commit()
 
 
+class Mode(str, Enum):
+    READ = "READ"
+    READ_WRITE = "READ_WRITE"
+    WRITE = "WRITE"
+
+
 class VDS:
     def __init__(
         self,
@@ -243,46 +250,59 @@ class VDS:
         options: Options = Options._None,
         full_resolution_dimension: int = 0,
         brick_size_2d_multiplier: int = 4,
-        init_value: InitValue = InitValue.zero
+        init_value: InitValue = InitValue.zero,
+        mode: Mode = Mode.READ
     ) -> None:
         super().__init__()
+
+        if mode in (Mode.READ_WRITE, Mode.READ):
+            try:
+                self._vds_source = openvds.open(path, connection_string)
+                self.initialize(
+                    path=path,
+                    connection_string=connection_string,
+                    databrick_size=databrick_size,
+                )
+            except RuntimeError as e:
+                if str(e) == "Open error: File::open ":
+                    raise VDSException(f"Could not open vds for path {path}")
+        else:
+            logger.debug("Creating new VDS source...")
+            self._vds_source = self.create(
+                path=path,
+                connection_string=connection_string,
+                databrick_size=databrick_size,
+                channels=channels,
+                axes=axes,
+                metadata_dict=metadata_dict,
+                channels_data=channels_data,
+                access_mode=AccessModes.Create,
+                lod=lod,
+                positive_margin=positive_margin,
+                negagitve_margin=negative_margin,
+                options=options,
+                full_resolution_dimension=full_resolution_dimension,
+                brick_size_2d_multiplier=brick_size_2d_multiplier,
+                init_value=init_value
+            )
+            self.initialize(
+                path=path,
+                connection_string=connection_string,
+                databrick_size=databrick_size,
+            )
+
+    def initialize(
+        self,
+        path: AnyStr,
+        connection_string: AnyStr = "",
+        databrick_size: BrickSizes = BrickSizes._128,
+    ):
+        self.closed = False
         self.path = path
         self.connection_string = connection_string
         self._channels = {}
         self._axes = {}
-
-        try:
-            self._vds_source = openvds.open(path, connection_string)
-            vds_info = get_vds_info(path, connection_string)
-        except RuntimeError as e:
-            if str(e) in ("Open error: File::open "):
-                logger.debug("Creating new VDS source...")
-                self.create(
-                    path=path,
-                    connection_string=connection_string,
-                    databrick_size=databrick_size,
-                    channels=channels,
-                    axes=axes,
-                    metadata_dict=metadata_dict,
-                    channels_data=channels_data,
-                    access_mode=AccessModes.Create,
-                    lod=lod,
-                    positive_margin=positive_margin,
-                    negagitve_margin=negative_margin,
-                    options=options,
-                    full_resolution_dimension=full_resolution_dimension,
-                    brick_size_2d_multiplier=brick_size_2d_multiplier,
-                    init_value=init_value
-                )
-                self = self.__init__(
-                    path=path,
-                    connection_string=connection_string,
-                    databrick_size=databrick_size,
-                    metadata_dict=metadata_dict,
-                )
-                return
-            else:
-                raise VDSException(f"Open VDS resulted with: {str(e)}") from e
+        self.closed = False
 
         self._layout = openvds.getLayout(self._vds_source)
         self._dimensionality = self._layout.getDimensionality()
@@ -329,14 +349,19 @@ class VDS:
     def get_channel(self, name: AnyStr) -> Channel:
         return self._channels[name]
 
+    def close(self, flush: bool = True):
+        if not getattr(self, "closed", True):
+            openvds.close(self._vds_source, flush)
+            self.closed = True
+
     def __del__(self):
-        openvds.close(self._vds_source)
+        self.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args, **kwargs):
-        return
+        self.close()
 
     @property
     def metadata(self) -> MetadataContainer:
@@ -422,7 +447,7 @@ class VDS:
             brick_size_2d_multiplier=brick_size_2d_multiplier,
             full_resolution_dimension=full_resolution_dimension,
             init_value=init_value,
-            close=True
+            # close=True
         )
 
     @property

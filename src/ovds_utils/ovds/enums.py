@@ -6,6 +6,7 @@ import openvds
 class InitValue(Enum):
     NaN = auto()
     zero = auto()
+    omit_init = auto()
 
 
 class Formats(Enum):

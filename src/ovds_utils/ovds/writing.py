@@ -1,3 +1,4 @@
+from logging import getLogger
 from typing import Any, AnyStr, Dict, List
 
 import numpy as np
@@ -5,6 +6,9 @@ import openvds
 
 from .enums import InitValue
 from .utils import copy_ovds_metadata
+
+
+logger = getLogger(__name__)
 
 FORMAT2NPTYPE = {
     openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
@@ -133,7 +137,7 @@ def create_vds(
     default_max_pages: int = 8,
     channels_data=None,
     init_value: InitValue = InitValue.zero,
-    close=True
+    # close: bool = True
 ):
     (
         layout_descriptor,
@@ -200,8 +204,12 @@ def create_vds(
                 channel=i,
                 maxPages=default_max_pages,
             )
-            INITVALUE[init_value](accessor, channel.format.value)
+            if init_value != InitValue.omit_init:
+                INITVALUE[init_value](accessor, channel.format.value)
+            else:
+                logger.warning(
+                    "Values initialization was omitted. Remember to do it and close vds resource properly."
+                )
+                return vds
 
-    if close:
-        openvds.close(vds)
     return vds
