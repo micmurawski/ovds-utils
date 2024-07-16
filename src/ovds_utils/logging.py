@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import sys
@@ -6,7 +8,7 @@ LOG_LEVEL = os.environ.get("LOGLVL", "NOTSET")
 FORMAT = "%(asctime)s::%(name)s::%(levelname)s::%(message)s"
 
 
-def get_logger(name):
+def get_logger(name) -> logging.Logger:
     logger = logging.getLogger(name)
     console_handler = logging.StreamHandler(sys.stdout)
     logger.setLevel(LOG_LEVEL)

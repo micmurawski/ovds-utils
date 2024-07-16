@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from subprocess import PIPE, Popen
 
 from ovds_utils.logging import get_logger

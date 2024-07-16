@@ -42,7 +42,7 @@ import numpy as np
 
 from ovds_utils.metadata import MetadataTypes, MetadataValue
 from ovds_utils.ovds.enums import BrickSizes, Formats
-from ovds_utils.vds import VDS, Channel, Components, Formats
+from ovds_utils.vds import VDS, Channel, Components, Formats, AccessModes
 
 metadata = {
     "example": MetadataValue(value="value", category="category#1", type=MetadataTypes.String)
@@ -57,6 +57,7 @@ vds = VDS(
     data=zeros,
     metadata_dict=metadata,
     databrick_size=BrickSizes.BrickSize_64,
+    access_mode=AccessModes.Create,
     channels=[
         Channel(
             name="Channel0",
