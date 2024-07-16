@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from copy import deepcopy
-from typing import AnyStr, List, Sequence, Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 import numpy as np
 import openvds
@@ -101,10 +103,10 @@ class Axis:
     def __init__(
         self,
         samples: int,
-        name: AnyStr,
+        name: str,
         coordinate_min: float,
         coordinate_max: float,
-        unit: AnyStr = "unitless",
+        unit: str = "unitless",
     ) -> None:
         self.samples = samples
         self.name = name
@@ -119,9 +121,9 @@ class Axis:
 class Channel:
     def __init__(
             self,
-            name: AnyStr,
+            name: str,
             format: Formats,
-            unit: AnyStr,
+            unit: str,
             value_range_min: float,
             value_range_max: float,
             components: Components,
@@ -230,8 +232,8 @@ class Channel:
 class VDS:
     def __init__(
         self,
-        path: AnyStr,
-        connection_string: AnyStr = "",
+        path: str,
+        connection_string: str = "",
         databrick_size: BrickSizes = BrickSizes._128,
         metadata_dict: MetadataContainer = {},
         channels_data: List[np.array] = None,
@@ -243,52 +245,67 @@ class VDS:
         options: Options = Options._None,
         full_resolution_dimension: int = 0,
         brick_size_2d_multiplier: int = 4,
-        init_value: InitValue = InitValue.zero
+        init_value: InitValue = InitValue.omit_init,
+        access_mode: AccessModes = AccessModes.ReadOnly
     ) -> None:
         super().__init__()
+
+        if access_mode in {AccessModes.ReadOnly, AccessModes.ReadWrite, AccessModes.ReadWriteWithoutLODGeneration}:
+            try:
+                self._vds_source = openvds.open(path, connection_string)
+                self.initialize(
+                    path=path,
+                    access_mode=access_mode,
+                    connection_string=connection_string,
+                )
+            except RuntimeError as e:
+                if str(e) == "Open error: File::open ":
+                    raise VDSException(f"Could not open vds for path {path}")
+        else:
+            logger.debug("Creating new VDS source...")
+            self._vds_source = self.create(
+                path=path,
+                connection_string=connection_string,
+                databrick_size=databrick_size,
+                channels=channels,
+                axes=axes,
+                metadata_dict=metadata_dict,
+                channels_data=channels_data,
+                access_mode=access_mode,
+                lod=lod,
+                positive_margin=positive_margin,
+                negagitve_margin=negative_margin,
+                options=options,
+                full_resolution_dimension=full_resolution_dimension,
+                brick_size_2d_multiplier=brick_size_2d_multiplier,
+                init_value=init_value
+            )
+
+            self.initialize(
+                path=path,
+                access_mode=access_mode,
+                connection_string=connection_string
+            )
+
+    def initialize(
+        self,
+        path: str,
+        access_mode: AccessModes,
+        connection_string: str = "",
+    ):
+        self.closed = False
         self.path = path
         self.connection_string = connection_string
         self._channels = {}
         self._axes = {}
-
-        try:
-            self._vds_source = openvds.open(path, connection_string)
-            vds_info = get_vds_info(path, connection_string)
-        except RuntimeError as e:
-            if str(e) in ("Open error: File::open "):
-                logger.debug("Creating new VDS source...")
-                self.create(
-                    path=path,
-                    connection_string=connection_string,
-                    databrick_size=databrick_size,
-                    channels=channels,
-                    axes=axes,
-                    metadata_dict=metadata_dict,
-                    channels_data=channels_data,
-                    access_mode=AccessModes.Create,
-                    lod=lod,
-                    positive_margin=positive_margin,
-                    negagitve_margin=negative_margin,
-                    options=options,
-                    full_resolution_dimension=full_resolution_dimension,
-                    brick_size_2d_multiplier=brick_size_2d_multiplier,
-                    init_value=init_value
-                )
-                self = self.__init__(
-                    path=path,
-                    connection_string=connection_string,
-                    databrick_size=databrick_size,
-                    metadata_dict=metadata_dict,
-                )
-                return
-            else:
-                raise VDSException(f"Open VDS resulted with: {str(e)}") from e
+        self.closed = False
 
         self._layout = openvds.getLayout(self._vds_source)
         self._dimensionality = self._layout.getDimensionality()
 
         vds_info = get_vds_info(path, connection_string)
         _info = vds_info['layoutInfo'] if 'layoutInfo' in vds_info else vds_info
+        databrick_size = BrickSizes.get_from_info(_info)
 
         for i, j in enumerate(_info['axisDescriptors']):
             self._axes[j['name']] = Axis(
@@ -300,6 +317,14 @@ class VDS:
             )
         self.chunks_count = self.count_number_of_chunks(self.shape, databrick_size)
         for i, j in enumerate(_info['channelDescriptors']):
+
+            if access_mode == AccessModes.Create:
+                _access_mode = AccessModes.ReadWrite
+            elif access_mode == AccessModes.CreateWithoutLODGeneration:
+                _access_mode = AccessModes.ReadWriteWithoutLODGeneration
+            else:
+                _access_mode = access_mode
+
             self._channels[j['name']] = Channel(
                 vds_source=self._vds_source,
                 shape=self.shape,
@@ -311,8 +336,8 @@ class VDS:
                 ),
                 value_range_max=j['valueRange'][1],
                 value_range_min=j['valueRange'][0],
-                accessor=self._create_accessor(channel=i),
-                chunks_count=self.count_number_of_chunks(self.shape, databrick_size)
+                accessor=self._create_accessor(channel=i, access_mode=_access_mode),
+                chunks_count=self.chunks_count
             )
 
     def channel(self, number: int) -> Channel:
@@ -326,17 +351,22 @@ class VDS:
     def axes(self) -> List[Axis]:
         return list(self._axes.values())[::-1]
 
-    def get_channel(self, name: AnyStr) -> Channel:
+    def get_channel(self, name: str) -> Channel:
         return self._channels[name]
 
+    def close(self, flush: bool = True):
+        if not getattr(self, "closed", True):
+            openvds.close(self._vds_source, flush)
+            self.closed = True
+
     def __del__(self):
-        openvds.close(self._vds_source)
+        self.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args, **kwargs):
-        return
+        self.close()
 
     @property
     def metadata(self) -> MetadataContainer:
@@ -376,7 +406,7 @@ class VDS:
     def __str__(self) -> str:
         return f"<{self.__class__.__qualname__}(path={self.path})>"
 
-    @ property
+    @property
     def axis_descriptors(self):
         return tuple((
             self._axes[k].name,
@@ -384,14 +414,14 @@ class VDS:
             self._axes[k].samples
         ) for k in self._axes)[::-1]
 
-    @ property
+    @property
     def shape(self):
         return tuple(self._axes[k].samples for k in self._axes)[::-1]
 
-    @ staticmethod
+    @staticmethod
     def create(
-        path: AnyStr,
-        connection_string: AnyStr,
+        path: str,
+        connection_string: str,
         databrick_size: BrickSizes,
         access_mode: AccessModes,
         channels: List[Channel],
@@ -422,7 +452,6 @@ class VDS:
             brick_size_2d_multiplier=brick_size_2d_multiplier,
             full_resolution_dimension=full_resolution_dimension,
             init_value=init_value,
-            close=True
         )
 
     @property

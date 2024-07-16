@@ -1,10 +1,15 @@
+from __future__ import annotations
+
+from logging import getLogger
 from typing import Any, AnyStr, Dict, List
 
 import numpy as np
 import openvds
 
-from .enums import InitValue
+from .enums import AccessModes, InitValue
 from .utils import copy_ovds_metadata
+
+logger = getLogger(__name__)
 
 FORMAT2NPTYPE = {
     openvds.VolumeDataChannelDescriptor.Format.Format_R64: np.float64,
@@ -133,7 +138,6 @@ def create_vds(
     default_max_pages: int = 8,
     channels_data=None,
     init_value: InitValue = InitValue.zero,
-    close=True
 ):
     (
         layout_descriptor,
@@ -153,23 +157,6 @@ def create_vds(
         full_resolution_dimension=full_resolution_dimension,
     )
 
-    (
-        layout_descriptor,
-        axis_descriptors,
-        channel_descriptors,
-        metadata_container
-    ) = create_vds_attributes(
-        databrick_size=databrick_size,
-        metadata_dict=metadata_dict,
-        channles=channels,
-        axes=axes,
-        lod_levels=lod,
-        negative_margin=negative_margin,
-        positive_margin=positive_margin,
-        options=options,
-        brick_size_2d_multiplier=brick_size_2d_multiplier,
-        full_resolution_dimension=full_resolution_dimension,
-    )
     vds = openvds.create(
         url=path,
         connectionString=connection_string,
@@ -179,18 +166,20 @@ def create_vds(
         metadata=metadata_container,
     )
     access_manager = openvds.getAccessManager(vds)
+
     if channels_data:
         for i, data in enumerate(channels_data):
             channel = channels[i]
             accessor = access_manager.createVolumeDataPageAccessor(
                 dimensionsND=channel.dimensions_nd.value,
-                accessMode=access_mode,
+                accessMode=AccessModes.Create.value,
                 lod=lod,
                 channel=i,
                 maxPages=default_max_pages,
             )
             write_pages(accessor, data, channel.format.value)
-    else:
+
+    if init_value != InitValue.omit_init:
         for i in range(len(channels)):
             channel = channels[i]
             accessor = access_manager.createVolumeDataPageAccessor(
@@ -202,6 +191,4 @@ def create_vds(
             )
             INITVALUE[init_value](accessor, channel.format.value)
 
-    if close:
-        openvds.close(vds)
     return vds

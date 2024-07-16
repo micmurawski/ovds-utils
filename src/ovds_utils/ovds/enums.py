@@ -6,6 +6,7 @@ import openvds
 class InitValue(Enum):
     NaN = auto()
     zero = auto()
+    omit_init = auto()
 
 
 class Formats(Enum):
@@ -33,11 +34,17 @@ class BrickSizes(Enum):
     _2048 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_2048
     _4096 = openvds.core.VolumeDataLayoutDescriptor.BrickSize.BrickSize_4096
 
+    @classmethod
+    def get_from_info(cls, vds_info: dict):
+        return getattr(cls, "_"+vds_info["layoutDescriptor"]["brickSize"].rsplit("_")[-1])
+
 
 class AccessModes(Enum):
     Create = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_Create
     ReadOnly = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_ReadOnly
     ReadWrite = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_ReadWrite
+    CreateWithoutLODGeneration = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_CreateWithoutLODGeneration
+    ReadWriteWithoutLODGeneration = openvds.IVolumeDataAccessManager.AccessMode.AccessMode_ReadWriteWithoutLODGeneration
 
 
 class Dimensions(Enum):
