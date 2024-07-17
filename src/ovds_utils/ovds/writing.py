@@ -80,7 +80,7 @@ def create_vds_attributes(
     positive_margin: int,
     brick_size_2d_multiplier: int,
     full_resolution_dimension: int,
-    channles,
+    channels,
     axes
 ):
     layout_descriptor = openvds.VolumeDataLayoutDescriptor(
@@ -107,7 +107,7 @@ def create_vds_attributes(
         )
 
     channel_descriptors = []
-    for c in channles:
+    for c in channels:
         channel_descriptors.append(
             openvds.VolumeDataChannelDescriptor(
                 format=c.format.value,
@@ -147,7 +147,7 @@ def create_vds(
     ) = create_vds_attributes(
         databrick_size=databrick_size,
         metadata_dict=metadata_dict,
-        channles=channels,
+        channels=channels,
         axes=axes,
         lod_levels=lod,
         negative_margin=negative_margin,

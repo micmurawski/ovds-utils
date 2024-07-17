@@ -28,7 +28,8 @@ vds = VDS(
     connection_string="",
     shape=shape,
     data=data,
-    databrick_size=BrickSizes.BrickSize_128
+    databrick_size=BrickSizes.BrickSize_128,
+    access_mode=AccessModes.Create,
 )
 
 print(vds[:10,0,0])
